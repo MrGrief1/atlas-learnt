@@ -854,7 +854,35 @@ enum WordBank {
     }
 
     static func isAssessmentReady(_ word: WordEntry) -> Bool {
-        word.hasReadableRussian && word.english.rangeOfCharacter(from: .decimalDigits) == nil
+        let english = word.english.lowercased()
+        let blockedPartsOfSpeech: Set<String> = [
+            "article",
+            "conjunction",
+            "determiner",
+            "function",
+            "interjection",
+            "preposition",
+            "pronoun"
+        ]
+        let blockedWords: Set<String> = [
+            "a", "about", "all", "also", "am", "an", "and", "any", "are", "as", "at", "be", "but",
+            "by", "can", "could", "do", "does", "each", "even", "every", "for", "from", "had", "has",
+            "have", "he", "her", "here", "him", "his", "how", "if", "in", "is", "it", "its", "just",
+            "may", "me", "more", "most", "must", "my", "no", "not", "of", "on", "one", "only", "or",
+            "our", "own", "same", "she", "should", "so", "some", "such", "than", "that", "the",
+            "their", "them", "there", "these", "they", "this", "those", "to", "too", "under", "up",
+            "us", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who",
+            "why", "will", "with", "would", "you", "your",
+            "los", "pop",
+            "abortion", "bomb", "cocaine", "die", "drug", "kill", "knife", "malaria", "racism",
+            "tuberculosis", "virus", "vodka", "vomit", "war"
+        ]
+
+        return word.hasReadableRussian &&
+            word.english.rangeOfCharacter(from: .decimalDigits) == nil &&
+            !blockedPartsOfSpeech.contains(word.partOfSpeech.lowercased()) &&
+            !blockedWords.contains(english) &&
+            english.count >= 4
     }
 
     static func translationChoices(for word: WordEntry) -> [String] {

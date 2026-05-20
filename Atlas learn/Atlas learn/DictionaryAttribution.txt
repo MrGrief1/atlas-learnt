@@ -1,0 +1,9 @@
+Atlas Learn dictionary data
+
+English-Russian translations are derived from FreeDict English-Russian
+2025.11.23, built from WikDict/Wiktionary/DBnary data and licensed under
+Creative Commons Attribution-ShareAlike 3.0.
+
+Frequency ordering is assisted by the KvaytG English-Russian filtered
+dictionary corpus. Atlas Learn filters this data to remove proper names,
+abbreviations, machine-translation artifacts, and ambiguous test words.
