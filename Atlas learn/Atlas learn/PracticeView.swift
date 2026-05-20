@@ -24,7 +24,19 @@ struct PracticeView: View {
     private var practiceWords: [WordEntry] {
         let source = words.isEmpty ? Array(profile.dailyWords.prefix(max(profile.dailyGoal, 7))) : words
         let fallback = source.isEmpty ? Array(WordBank.all.prefix(max(profile.dailyGoal, 7))) : source
-        return fallback.uniquedByID()
+        let uniqueWords = fallback.uniquedByID()
+
+        if let startWordID {
+            if let selected = uniqueWords.first(where: { $0.id == startWordID }) {
+                return [selected]
+            }
+
+            if let selected = WordBank.all.first(where: { $0.id == startWordID }) {
+                return [selected]
+            }
+        }
+
+        return Array(uniqueWords.prefix(1))
     }
 
     private var currentWord: WordEntry {
@@ -667,7 +679,10 @@ private struct StartWordCard: View {
                 .foregroundStyle(.black.opacity(0.72))
                 .lineSpacing(3)
 
-            ExampleCard(title: language.text(ru: "Контекст", en: "Context"), text: word.example(for: language))
+            ExampleCard(
+                title: language.text(ru: "Контекст", en: "Context"),
+                text: "\(word.exampleEN)\n\(word.exampleRU)"
+            )
 
             if !word.collocations.isEmpty || !word.hints.isEmpty {
                 FlexibleChipWrap(items: Array((word.collocations + word.hints).prefix(6)))

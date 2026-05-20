@@ -18,7 +18,8 @@ struct HomeView: View {
     @State private var showsStats = false
     @State private var showsDailyProgress = false
     @State private var selectedInfoWord: WordEntry?
-    @State private var selectedPracticeWord: WordEntry?
+    @State private var generatedExamples: [WordEntry.ID: GeneratedWordExample] = [:]
+    @State private var generatingExampleIDs: Set<WordEntry.ID> = []
 
     private var dailyWords: [WordEntry] {
         profile.dailyWords
@@ -71,6 +72,9 @@ struct HomeView: View {
         .onChange(of: dailyWordIDs) { _, _ in
             alignSelectedWord()
         }
+        .task(id: currentWord.id) {
+            await generateExampleIfNeeded(for: currentWord)
+        }
         .atlasMotion(currentWord.id)
         .atlasSoftMotion(profile)
         .sheet(isPresented: $showsProfile) {
@@ -84,13 +88,6 @@ struct HomeView: View {
                 profile: $profile,
                 words: dailyWords,
                 startWordID: currentWord.id
-            )
-        }
-        .fullScreenCover(item: $selectedPracticeWord) { word in
-            PracticeView(
-                profile: $profile,
-                words: [word],
-                startWordID: word.id
             )
         }
         .sheet(isPresented: $showsWordBank) {
@@ -237,7 +234,9 @@ struct HomeView: View {
     }
 
     private func wordCard(for word: WordEntry) -> some View {
-        VStack(spacing: 21) {
+        let example = displayedExample(for: word)
+
+        return VStack(spacing: 21) {
             VStack(spacing: 10) {
                 Text(word.english.lowercased())
                     .font(.system(size: word.english.count > 12 ? 46 : 56, weight: .black, design: .serif))
@@ -264,19 +263,26 @@ struct HomeView: View {
             }
 
             VStack(spacing: 10) {
-                Text("(\(word.partOfSpeech).) \(word.definition(for: profile.appLanguage))")
-                    .font(.system(size: 23, weight: .semibold, design: .rounded))
+                Text(word.russian)
+                    .font(.system(size: 29, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(4)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.74)
+
+                Text(example.english)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(word.russian)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                Text(example.russian)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
             }
             .padding(.horizontal, 4)
         }
@@ -287,10 +293,6 @@ struct HomeView: View {
         HStack(spacing: 22) {
             homeIconButton(systemName: "info", size: 48) {
                 selectedInfoWord = word
-            }
-
-            homeIconButton(systemName: "play.circle.fill", size: 48) {
-                selectedPracticeWord = word
             }
 
             homeIconButton(systemName: "checkmark.seal", size: 48) {
@@ -314,6 +316,21 @@ struct HomeView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func displayedExample(for word: WordEntry) -> GeneratedWordExample {
+        generatedExamples[word.id] ?? GeneratedWordExample(english: word.exampleEN, russian: word.exampleRU)
+    }
+
+    private func generateExampleIfNeeded(for word: WordEntry) async {
+        guard AtlasExampleGenerator.isAvailable else { return }
+        guard generatedExamples[word.id] == nil, !generatingExampleIDs.contains(word.id) else { return }
+
+        generatingExampleIDs.insert(word.id)
+        defer { generatingExampleIDs.remove(word.id) }
+
+        guard let generated = await AtlasExampleGenerator.generateExample(for: word) else { return }
+        generatedExamples[word.id] = generated
     }
 
     private var bottomNavigation: some View {
@@ -471,8 +488,14 @@ struct WordInfoView: View {
 
                 Divider()
 
-                Text(word.example(for: language))
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(word.exampleEN)
+                        .font(.system(size: 17, weight: .black, design: .rounded))
+
+                    Text(word.exampleRU)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.68))
+                }
                     .lineSpacing(4)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)

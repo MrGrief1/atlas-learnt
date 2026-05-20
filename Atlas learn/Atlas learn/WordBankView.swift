@@ -394,15 +394,17 @@ struct WordBankView: View {
                     .disabled(levelFilter == nil && topicFilter == nil)
                     .opacity(levelFilter == nil && topicFilter == nil ? 0.45 : 1)
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
             }
+            .frame(height: 56)
 
             if let expandedPicker {
                 customPicker(for: expandedPicker)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(9)
+        .padding(.vertical, 8)
         .background(AtlasColors.mint.opacity(0.34))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
@@ -421,13 +423,15 @@ struct WordBankView: View {
                 Text(language.text(ru: "Найдено", en: "Showing"))
                     .font(.system(size: 10, weight: .heavy, design: .rounded))
                     .foregroundStyle(.black.opacity(0.56))
-                Text("\(displayedWords.count)")
+                Text(verbatim: "\(displayedWords.count)")
                     .font(.system(size: 15, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
             }
         }
         .foregroundStyle(.black)
-        .padding(.horizontal, 12)
-        .frame(height: 48)
+        .padding(.horizontal, 10)
+        .frame(width: 124, height: 48, alignment: .leading)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
@@ -695,7 +699,7 @@ struct WordBankRow: View {
                 Text(word.russian)
                     .font(.system(size: 15, weight: .black, design: .rounded))
 
-                Text(word.definition(for: language))
+                Text(word.exampleEN)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.black.opacity(0.6))
                     .lineLimit(2)
@@ -708,7 +712,7 @@ struct WordBankRow: View {
                         .font(.system(size: 13, weight: .black, design: .rounded))
                         .foregroundStyle(.black)
                         .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
+                        .padding(.vertical, 8)
                         .background(AtlasColors.mint.opacity(0.5))
                         .clipShape(Capsule())
                         .overlay(Capsule().stroke(.black.opacity(0.28), lineWidth: 1.2))
@@ -725,6 +729,7 @@ struct WordBankRow: View {
                 } label: {
                     Image(systemName: "speaker.wave.2")
                         .font(.system(size: 18, weight: .bold))
+                        .frame(width: 38, height: 38)
                 }
 
                 Button {
@@ -735,6 +740,7 @@ struct WordBankRow: View {
                 } label: {
                     Image(systemName: profile.savedWordIDs.contains(word.id) ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 19, weight: .bold))
+                        .frame(width: 38, height: 38)
                 }
 
                 Button {
@@ -745,12 +751,15 @@ struct WordBankRow: View {
                 } label: {
                     Image(systemName: profile.favoriteWordIDs.contains(word.id) ? "heart.fill" : "heart")
                         .font(.system(size: 19, weight: .bold))
+                        .frame(width: 38, height: 38)
                 }
             }
             .foregroundStyle(.black)
             .buttonStyle(.plain)
+            .padding(.leading, 2)
         }
-        .padding(15)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
         .foregroundStyle(.black)
         .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
