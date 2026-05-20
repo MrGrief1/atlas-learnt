@@ -7,28 +7,58 @@ import SwiftUI
 import UIKit
 
 enum AtlasHaptics {
+    private static let lightImpactGenerator = UIImpactFeedbackGenerator(style: .light)
+    private static let mediumImpactGenerator = UIImpactFeedbackGenerator(style: .medium)
+    private static let softImpactGenerator = UIImpactFeedbackGenerator(style: .soft)
+    private static let selectionGenerator = UISelectionFeedbackGenerator()
+    private static let notificationGenerator = UINotificationFeedbackGenerator()
+
+    static func prepare() {
+        lightImpactGenerator.prepare()
+        mediumImpactGenerator.prepare()
+        softImpactGenerator.prepare()
+        selectionGenerator.prepare()
+        notificationGenerator.prepare()
+    }
+
     static func tap() {
         impact(.light)
     }
 
     static func selection() {
-        UISelectionFeedbackGenerator().selectionChanged()
+        selectionGenerator.selectionChanged()
+        selectionGenerator.prepare()
     }
 
     static func success() {
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        notificationGenerator.notificationOccurred(.success)
+        notificationGenerator.prepare()
     }
 
     static func warning() {
-        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        notificationGenerator.notificationOccurred(.warning)
+        notificationGenerator.prepare()
     }
 
     static func error() {
-        UINotificationFeedbackGenerator().notificationOccurred(.error)
+        notificationGenerator.notificationOccurred(.error)
+        notificationGenerator.prepare()
     }
 
     static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .medium) {
-        UIImpactFeedbackGenerator(style: style).impactOccurred()
+        let generator: UIImpactFeedbackGenerator
+
+        switch style {
+        case .light:
+            generator = lightImpactGenerator
+        case .soft:
+            generator = softImpactGenerator
+        default:
+            generator = mediumImpactGenerator
+        }
+
+        generator.impactOccurred()
+        generator.prepare()
     }
 }
 

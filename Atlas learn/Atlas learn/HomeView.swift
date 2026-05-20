@@ -20,9 +20,10 @@ struct HomeView: View {
     @State private var selectedInfoWord: WordEntry?
     @State private var generatedExamples: [WordEntry.ID: GeneratedWordExample] = [:]
     @State private var generatingExampleIDs: Set<WordEntry.ID> = []
+    @State private var cachedDailyWords: [WordEntry] = []
 
     private var dailyWords: [WordEntry] {
-        profile.dailyWords
+        cachedDailyWords.isEmpty ? profile.dailyWords : cachedDailyWords
     }
 
     private var currentWord: WordEntry {
@@ -36,8 +37,18 @@ struct HomeView: View {
         return dailyWords[min(currentIndex, dailyWords.count - 1)]
     }
 
-    private var dailyWordIDs: [WordEntry.ID] {
-        dailyWords.map(\.id)
+    private var dailyWordsRefreshToken: DailyWordsRefreshToken {
+        DailyWordsRefreshToken(
+            currentLevel: profile.currentLevel,
+            score: profile.score0To160,
+            dailyGoal: profile.dailyGoal,
+            selectedTopics: profile.selectedTopics,
+            unknownWordIDs: profile.unknownWordIDs,
+            savedWordIDs: profile.savedWordIDs,
+            practiceCount: profile.practiceHistory.count,
+            xp: profile.xp,
+            lastStudyDateKey: profile.lastStudyDateKey
+        )
     }
 
     private var progressValue: Double {
@@ -66,17 +77,19 @@ struct HomeView: View {
             .padding(.bottom, 18)
         }
         .onAppear {
+            AtlasHaptics.prepare()
             profile.prepareForToday()
-            alignSelectedWord()
+            refreshDailyWords()
         }
-        .onChange(of: dailyWordIDs) { _, _ in
-            alignSelectedWord()
+        .onChange(of: dailyWordsRefreshToken) { _, _ in
+            refreshDailyWords()
         }
         .task(id: currentWord.id) {
-            await generateExampleIfNeeded(for: currentWord)
+            let word = currentWord
+            try? await Task.sleep(nanoseconds: 320_000_000)
+            guard !Task.isCancelled else { return }
+            await generateExampleIfNeeded(for: word)
         }
-        .atlasMotion(currentWord.id)
-        .atlasSoftMotion(profile)
         .sheet(isPresented: $showsProfile) {
             ProfileView(
                 profile: $profile,
@@ -441,10 +454,23 @@ struct HomeView: View {
 
     private func scrollToWord(at index: Int) {
         let targetIndex = max(0, min(index, dailyWords.count - 1))
+        let targetID = dailyWords[targetIndex].id
+
+        withoutAnimation {
+            currentIndex = targetIndex
+        }
 
         withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-            currentIndex = targetIndex
-            selectedWordID = dailyWords[targetIndex].id
+            selectedWordID = targetID
+        }
+    }
+
+    private func refreshDailyWords() {
+        let words = WordBank.dailyWords(for: profile)
+
+        withoutAnimation {
+            cachedDailyWords = words
+            alignSelectedWord()
         }
     }
 
@@ -470,12 +496,38 @@ struct HomeView: View {
             return
         }
 
-        currentIndex = selectedIndex
+        withoutAnimation {
+            currentIndex = selectedIndex
+        }
 
         if feedback {
-            AtlasHaptics.impact(.soft)
+            DispatchQueue.main.async {
+                AtlasHaptics.selection()
+            }
         }
     }
+
+    private func withoutAnimation(_ updates: () -> Void) {
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+
+        withTransaction(transaction) {
+            updates()
+        }
+    }
+}
+
+private struct DailyWordsRefreshToken: Equatable {
+    let currentLevel: LearningLevel
+    let score: Int
+    let dailyGoal: Int
+    let selectedTopics: [String]
+    let unknownWordIDs: [String]
+    let savedWordIDs: [String]
+    let practiceCount: Int
+    let xp: Int
+    let lastStudyDateKey: String
 }
 
 struct WordInfoView: View {
