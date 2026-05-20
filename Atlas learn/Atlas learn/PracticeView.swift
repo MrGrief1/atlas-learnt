@@ -12,576 +12,1217 @@ struct PracticeView: View {
     let words: [WordEntry]
     var startWordID: WordEntry.ID?
 
-    @State private var index = 0
-    @State private var selectedMode: PracticeMode?
+    @State private var session = PracticeSession(words: [], startWordID: nil)
     @State private var selectedChoice: String?
     @State private var selectedTiles: [String] = []
     @State private var remainingTiles: [String] = []
-    @State private var lastAnswerWasCorrect: Bool?
-    @State private var lastAnswerText = ""
-    @State private var hearts = 3
-    @State private var sessionXP = 0
+    @State private var feedback: PracticeFeedback?
     @State private var isFinished = false
+    @State private var hasStartedCurrentWord = false
+    @StateObject private var speech = AtlasSpeechRecognition()
 
     private var practiceWords: [WordEntry] {
-        let source = words.isEmpty ? Array(WordBank.all.prefix(max(profile.dailyGoal, 7))) : words
-        return source.uniquedByID()
+        let source = words.isEmpty ? Array(profile.dailyWords.prefix(max(profile.dailyGoal, 7))) : words
+        let fallback = source.isEmpty ? Array(WordBank.all.prefix(max(profile.dailyGoal, 7))) : source
+        return fallback.uniquedByID()
     }
 
     private var currentWord: WordEntry {
-        practiceWords[min(index, max(practiceWords.count - 1, 0))]
+        if let currentWordID = session.currentWordID,
+           let word = practiceWords.first(where: { $0.id == currentWordID }) {
+            return word
+        }
+
+        return practiceWords.first ?? WordBank.all[0]
     }
 
     private var language: AppLanguage {
         profile.appLanguage
     }
 
+    private var currentStep: PracticeStep {
+        session.currentStep
+    }
+
+    private var lessonProgress: Double {
+        guard !session.wordIDs.isEmpty, !session.steps.isEmpty else { return 0 }
+        let completed = session.currentWordIndex * session.steps.count + session.currentStepIndex + (feedback == nil ? 0 : 1)
+        return Double(completed) / Double(session.wordIDs.count * session.steps.count)
+    }
+
+    private var speechTarget: String {
+        currentWord.english
+    }
+
     var body: some View {
         ZStack {
-            AtlasColors.paper.ignoresSafeArea()
+            lessonBackground
 
             if isFinished {
-                completionView
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            } else if selectedMode == nil {
-                modePickerView
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                LessonSummaryView(
+                    language: language,
+                    session: session,
+                    levelTag: profile.currentLevel.tag,
+                    score: profile.score0To160,
+                    dismiss: dismiss.callAsFunction
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
             } else {
-                challengeView
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
+                lessonContent
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
         }
-        .onAppear(perform: alignStartWord)
-        .atlasMotion(index)
-        .atlasMotion(selectedMode)
-        .atlasMotion(selectedChoice)
-        .atlasMotion(lastAnswerWasCorrect)
-        .atlasMotion(hearts)
-        .atlasSoftMotion(profile.appLanguage)
-    }
-
-    private var modePickerView: some View {
-        VStack(spacing: 0) {
-            practiceHeader
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(language.text(ru: "Выбери тренировку", en: "Choose practice"))
-                            .font(.system(size: 31, weight: .black, design: .serif))
-                        Text(language.text(
-                            ru: "Начнем со слова, на котором ты остановился. Можно закрепить перевод, синоним, фразу или контекст.",
-                            en: "Start from the word you stopped on. Practice meaning, synonym, sentence, or context."
-                        ))
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(.black.opacity(0.62))
-                        .lineSpacing(3)
-                    }
-
-                    focusWordCard
-
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
-                        ForEach(PracticeMode.allCases) { mode in
-                            Button {
-                                startChallenge(mode)
-                            } label: {
-                                modeCard(mode)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    dueStrip
-                }
-                .foregroundStyle(.black)
-                .padding(.horizontal, AtlasLayout.screenPadding)
-                .padding(.top, 20)
-                .padding(.bottom, 28)
-            }
+        .onAppear(perform: startSessionIfNeeded)
+        .onDisappear {
+            speech.stopRecording(keepTranscript: false)
         }
+        .onChange(of: currentStep) { _, _ in
+            prepareCurrentStep()
+        }
+        .atlasMotion(currentWord.id)
+        .atlasMotion(currentStep)
+        .atlasMotion(session.hearts)
     }
 
-    private var challengeView: some View {
+    private var lessonBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.97, green: 0.94, blue: 0.86),
+                Color(red: 0.84, green: 0.95, blue: 0.92),
+                Color(red: 0.98, green: 0.89, blue: 0.78)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+
+    private var lessonContent: some View {
         VStack(spacing: 0) {
-            practiceHeader
+            LessonHeader(
+                language: language,
+                progress: lessonProgress,
+                hearts: session.hearts,
+                xp: session.xp,
+                wordPosition: min(session.currentWordIndex + 1, max(session.wordIDs.count, 1)),
+                wordCount: max(session.wordIDs.count, 1),
+                dismiss: dismiss.callAsFunction
+            )
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 19) {
-                    if let selectedMode {
-                        Text(selectedMode.title(for: language))
-                            .font(.system(size: 27, weight: .black, design: .serif))
-                            .foregroundStyle(.black)
+                VStack(alignment: .leading, spacing: 13) {
+                    if hasStartedCurrentWord {
+                        PracticeStepRail(steps: session.steps, currentStep: currentStep)
 
-                        switch selectedMode {
-                        case .translateChoice:
-                            choiceChallenge(
-                                prompt: language.text(ru: "Выбери правильный перевод", en: "Choose the correct translation"),
-                                hero: currentWord.english,
-                                detail: currentWord.ipa,
-                                choices: WordBank.translationChoices(for: currentWord),
-                                correctAnswer: currentWord.russian
-                            )
-                        case .synonymMatch:
-                            choiceChallenge(
-                                prompt: language.text(ru: "Найди ближайший синоним", en: "Find the closest synonym"),
-                                hero: currentWord.english,
-                                detail: currentWord.russian,
-                                choices: WordBank.synonymChoices(for: currentWord),
-                                correctAnswer: currentWord.synonyms.first ?? "no exact synonym"
-                            )
-                        case .sentenceBuilder:
-                            sentenceBuilderChallenge
-                        case .clozeChoice:
-                            choiceChallenge(
-                                prompt: currentWord.clozeSentence,
-                                hero: "____",
-                                detail: currentWord.russian,
-                                choices: WordBank.clozeChoices(for: currentWord),
-                                correctAnswer: currentWord.english
-                            )
-                        }
+                        TargetWordCapsule(
+                            word: currentWord,
+                            language: language,
+                            mastery: profile.wordProgress[currentWord.id]?.mastery ?? 0,
+                            speak: speakWord
+                        )
+
+                        challengeContent
+                    } else {
+                        StartWordCard(
+                            word: currentWord,
+                            language: language,
+                            mastery: profile.wordProgress[currentWord.id]?.mastery ?? 0,
+                            speak: speakWord,
+                            start: startWordQuestions
+                        )
                     }
                 }
                 .padding(.horizontal, AtlasLayout.screenPadding)
-                .padding(.top, 20)
-                .padding(.bottom, 132)
+                .padding(.top, 12)
+                .padding(.bottom, hasStartedCurrentWord ? 132 : 28)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if let lastAnswerWasCorrect {
-                feedbackBar(isCorrect: lastAnswerWasCorrect)
+            if hasStartedCurrentWord {
+                bottomPanel
             }
         }
     }
 
-    private var practiceHeader: some View {
-        VStack(spacing: 13) {
+    @ViewBuilder
+    private var challengeContent: some View {
+        switch currentStep {
+        case .meaningChoice:
+            ChoiceExerciseView(
+                title: currentStep.title(for: language),
+                prompt: language.text(ru: "Что значит это слово?", en: "What does this word mean?"),
+                focusText: currentWord.english,
+                detail: "\(currentWord.ipa) · \(currentWord.partOfSpeech)",
+                choices: WordBank.translationChoices(for: currentWord),
+                correctAnswer: currentWord.russian,
+                selectedChoice: selectedChoice,
+                feedback: feedback,
+                choose: selectChoice
+            )
+        case .ruToEnglishTiles:
+            TileExerciseView(
+                title: currentStep.title(for: language),
+                prompt: currentWord.exampleRU,
+                helper: language.text(ru: "Собери английскую фразу. Целевое слово должно оказаться внутри ответа.", en: "Build the English phrase. The target word belongs inside the answer."),
+                selectedTiles: selectedTiles,
+                remainingTiles: remainingTiles,
+                isLocked: feedback != nil,
+                playAction: nil,
+                chooseTile: chooseTile,
+                removeTile: removeTile
+            )
+        case .listenTiles:
+            TileExerciseView(
+                title: currentStep.title(for: language),
+                prompt: language.text(ru: "Слушай английскую фразу и собери ее.", en: "Listen to the English phrase and assemble it."),
+                helper: currentWord.russian,
+                selectedTiles: selectedTiles,
+                remainingTiles: remainingTiles,
+                isLocked: feedback != nil,
+                playAction: speakSentence,
+                chooseTile: chooseTile,
+                removeTile: removeTile
+            )
+        case .clozeWord:
+            ChoiceExerciseView(
+                title: currentStep.title(for: language),
+                prompt: currentWord.clozeSentence,
+                focusText: "____",
+                detail: currentWord.exampleRU,
+                choices: WordBank.clozeChoices(for: currentWord),
+                correctAnswer: currentWord.english,
+                selectedChoice: selectedChoice,
+                feedback: feedback,
+                choose: selectChoice
+            )
+        case .wordOrder:
+            TileExerciseView(
+                title: currentStep.title(for: language),
+                prompt: currentWord.exampleRU,
+                helper: language.text(ru: "Поставь все слова в естественном английском порядке.", en: "Put every word into natural English order."),
+                selectedTiles: selectedTiles,
+                remainingTiles: remainingTiles,
+                isLocked: feedback != nil,
+                playAction: nil,
+                chooseTile: chooseTile,
+                removeTile: removeTile
+            )
+        case .speechRepeat:
+            SpeechRepeatChallenge(
+                word: currentWord,
+                language: language,
+                target: speechTarget,
+                speech: speech,
+                isLocked: feedback != nil,
+                playAction: speakWord,
+                recordAction: startSpeechAttempt,
+                stopAction: stopSpeechAttempt
+            )
+        }
+    }
+
+    private var bottomPanel: some View {
+        VStack(spacing: 0) {
+            if let feedback {
+                FeedbackPanel(
+                    feedback: feedback,
+                    language: language,
+                    continueAction: continueLesson
+                )
+            } else {
+                ActionPanel(
+                    language: language,
+                    step: currentStep,
+                    canSubmit: canSubmitCurrentStep,
+                    canResetTiles: isTileStep(currentStep) && !selectedTiles.isEmpty,
+                    canSkip: currentStep == .speechRepeat && speech.canSkip,
+                    resetAction: resetTiles,
+                    skipAction: skipSpeechStep,
+                    submitAction: submitCurrentStep
+                )
+            }
+        }
+        .background(.ultraThinMaterial)
+        .overlay(Rectangle().fill(.black.opacity(0.1)).frame(height: 1), alignment: .top)
+    }
+
+    private var canSubmitCurrentStep: Bool {
+        switch currentStep {
+        case .meaningChoice, .clozeWord:
+            false
+        case .ruToEnglishTiles, .listenTiles, .wordOrder:
+            !selectedTiles.isEmpty && remainingTiles.isEmpty
+        case .speechRepeat:
+            !speech.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && speech.state != .recording
+        }
+    }
+
+    private func startSessionIfNeeded() {
+        guard session.wordIDs.isEmpty else { return }
+
+        session = PracticeSession(words: practiceWords, startWordID: startWordID)
+        prepareCurrentStep()
+    }
+
+    private func startWordQuestions() {
+        AtlasHaptics.tap()
+        withAnimation(.atlasSpring) {
+            hasStartedCurrentWord = true
+        }
+        prepareCurrentStep()
+    }
+
+    private func prepareCurrentStep() {
+        selectedChoice = nil
+        selectedTiles = []
+        feedback = nil
+        speech.reset()
+
+        if isTileStep(currentStep) {
+            remainingTiles = WordBank.sentenceTiles(for: currentWord)
+        } else {
+            remainingTiles = []
+        }
+
+        if hasStartedCurrentWord && currentStep == .listenTiles {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                speakSentence()
+            }
+        }
+    }
+
+    private func speakWord() {
+        AtlasHaptics.tap()
+        AtlasSpeech.speak(currentWord.english, voice: profile.selectedSpeechVoice)
+    }
+
+    private func speakSentence() {
+        AtlasHaptics.tap()
+        AtlasSpeech.speak(WordBank.sentenceAnswer(for: currentWord), voice: profile.selectedSpeechVoice)
+    }
+
+    private func selectChoice(_ choice: String, correctAnswer: String) {
+        guard feedback == nil else { return }
+
+        selectedChoice = choice
+        commitStep(isCorrect: normalized(choice) == normalized(correctAnswer), detail: correctAnswer)
+    }
+
+    private func chooseTile(_ tile: String, at index: Int) {
+        guard feedback == nil, remainingTiles.indices.contains(index) else { return }
+
+        AtlasHaptics.selection()
+        withAnimation(.atlasSpring) {
+            selectedTiles.append(tile)
+            remainingTiles.remove(at: index)
+        }
+    }
+
+    private func removeTile(at index: Int) {
+        guard feedback == nil, selectedTiles.indices.contains(index) else { return }
+
+        AtlasHaptics.selection()
+        withAnimation(.atlasSpring) {
+            let tile = selectedTiles.remove(at: index)
+            remainingTiles.append(tile)
+        }
+    }
+
+    private func resetTiles() {
+        guard isTileStep(currentStep) else { return }
+
+        AtlasHaptics.tap()
+        withAnimation(.atlasSpring) {
+            selectedTiles = []
+            remainingTiles = WordBank.sentenceTiles(for: currentWord)
+        }
+    }
+
+    private func startSpeechAttempt() {
+        AtlasHaptics.tap()
+        speech.startRecording(localeIdentifier: profile.selectedSpeechVoice.languageCode)
+    }
+
+    private func stopSpeechAttempt() {
+        AtlasHaptics.tap()
+        speech.stopRecording(keepTranscript: true)
+    }
+
+    private func submitCurrentStep() {
+        guard feedback == nil else { return }
+
+        switch currentStep {
+        case .meaningChoice, .clozeWord:
+            break
+        case .ruToEnglishTiles, .listenTiles, .wordOrder:
+            let answer = selectedTiles.joined(separator: " ")
+            let correct = WordBank.sentenceAnswer(for: currentWord)
+            commitStep(isCorrect: normalized(answer) == normalized(correct), detail: correct)
+        case .speechRepeat:
+            let result = evaluateSpeechAnswer()
+            commitStep(isCorrect: result.isCorrect, detail: result.detail)
+        }
+    }
+
+    private func skipSpeechStep() {
+        guard currentStep == .speechRepeat, feedback == nil else { return }
+
+        AtlasHaptics.tap()
+        speech.stopRecording(keepTranscript: true)
+        withAnimation(.atlasSpring) {
+            session.record(step: currentStep, wordID: currentWord.id, isCorrect: false, xp: 0, wasSkipped: true)
+            feedback = PracticeFeedback(
+                isCorrect: false,
+                wasSkipped: true,
+                title: language.text(ru: "Пропущено", en: "Skipped"),
+                detail: language.text(
+                    ru: "Микрофон или распознавание недоступны. Этот шаг не влияет на XP и сердца.",
+                    en: "Microphone or speech recognition is unavailable. This step does not affect XP or hearts."
+                ),
+                correctAnswer: speechTarget
+            )
+        }
+    }
+
+    private func evaluateSpeechAnswer() -> (isCorrect: Bool, detail: String) {
+        let heard = speech.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedHeard = normalized(heard)
+        let target = normalized(speechTarget)
+        let accepted = [target] + currentWord.acceptedAnswers.map(normalized)
+        let isCorrect = accepted.contains { answer in
+            normalizedHeard == answer || normalizedHeard.contains(answer)
+        }
+
+        let detail = isCorrect
+            ? language.text(ru: "Распознано: \(heard)", en: "Recognized: \(heard)")
+            : language.text(ru: "Я услышал: \(heard). Цель: \(speechTarget)", en: "I heard: \(heard). Target: \(speechTarget)")
+        return (isCorrect, detail)
+    }
+
+    private func commitStep(isCorrect: Bool, detail: String) {
+        let step = currentStep
+        let mode = step.mode
+        let xp = profile.recordPractice(word: currentWord, mode: mode, isCorrect: isCorrect)
+
+        if isCorrect {
+            AtlasHaptics.success()
+        } else {
+            AtlasHaptics.error()
+        }
+
+        withAnimation(.atlasSpring) {
+            session.record(step: step, wordID: currentWord.id, isCorrect: isCorrect, xp: xp)
+            feedback = PracticeFeedback(
+                isCorrect: isCorrect,
+                wasSkipped: false,
+                title: isCorrect ? language.text(ru: "Верно", en: "Correct") : language.text(ru: "Еще раз", en: "Try again"),
+                detail: isCorrect ? "+\(xp) XP · \(currentWord.english) / \(currentWord.russian)" : detail,
+                correctAnswer: detail
+            )
+        }
+    }
+
+    private func continueLesson() {
+        guard feedback != nil else { return }
+
+        if session.hearts == 0 {
+            finishSession()
+            return
+        }
+
+        if session.isOnLastStep {
+            if session.currentWordIndex >= session.wordIDs.count - 1 {
+                finishSession()
+            } else {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                    session.advanceWord()
+                    hasStartedCurrentWord = false
+                }
+            }
+        } else {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                session.advanceStep()
+            }
+        }
+    }
+
+    private func finishSession() {
+        speech.stopRecording(keepTranscript: false)
+        AtlasHaptics.success()
+        withAnimation(.atlasSoftSpring) {
+            isFinished = true
+        }
+    }
+
+    private func isTileStep(_ step: PracticeStep) -> Bool {
+        switch step {
+        case .ruToEnglishTiles, .listenTiles, .wordOrder:
+            true
+        case .meaningChoice, .clozeWord, .speechRepeat:
+            false
+        }
+    }
+
+    private func normalized(_ value: String) -> String {
+        value
+            .lowercased()
+            .replacingOccurrences(of: "[^a-zа-яё0-9 ]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private struct PracticeFeedback: Equatable {
+    let isCorrect: Bool
+    let wasSkipped: Bool
+    let title: String
+    let detail: String
+    let correctAnswer: String
+}
+
+private struct LessonHeader: View {
+    let language: AppLanguage
+    let progress: Double
+    let hearts: Int
+    let xp: Int
+    let wordPosition: Int
+    let wordCount: Int
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 11) {
             HStack(spacing: 12) {
                 Button {
                     AtlasHaptics.tap()
                     dismiss()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 19, weight: .black))
+                        .font(.system(size: 18, weight: .black))
                         .foregroundStyle(.black)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(.white.opacity(0.82)))
+                        .overlay(Circle().stroke(.black.opacity(0.86), lineWidth: 2))
                 }
                 .buttonStyle(.plain)
 
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(.black.opacity(0.08))
+                            .fill(.black.opacity(0.1))
 
                         Capsule()
-                            .fill(AtlasColors.green)
-                            .frame(width: proxy.size.width * progressWidth)
+                            .fill(LinearGradient(colors: [AtlasColors.green, AtlasColors.mint], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: proxy.size.width * min(max(progress, 0), 1))
                     }
                 }
-                .frame(height: 10)
+                .frame(height: 12)
 
                 HStack(spacing: 3) {
-                    ForEach(0..<3, id: \.self) { heart in
-                        Image(systemName: heart < hearts ? "heart.fill" : "heart")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(heart < hearts ? AtlasColors.coral : .black.opacity(0.25))
+                    ForEach(0..<3, id: \.self) { index in
+                        Image(systemName: index < hearts ? "heart.fill" : "heart")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(index < hearts ? AtlasColors.coral : .black.opacity(0.24))
                     }
                 }
                 .frame(width: 66)
             }
 
-            HStack {
-                CapsuleMetric(icon: "bolt.fill", title: "\(sessionXP) XP")
+            HStack(spacing: 8) {
+                CapsuleMetric(icon: "bolt.fill", title: "\(xp) XP")
+                CapsuleMetric(icon: "map", title: "\(wordPosition)/\(wordCount)")
                 Spacer()
-                CapsuleMetric(icon: "flag.checkered", title: "\(profile.currentLevel.tag) \(profile.score0To160)")
-                Spacer()
-                CapsuleMetric(icon: "bookmark", title: "\(min(index + 1, practiceWords.count))/\(practiceWords.count)")
-            }
-            .colorScheme(.dark)
-        }
-        .padding(.horizontal, AtlasLayout.screenPadding)
-        .padding(.top, 12)
-        .padding(.bottom, 6)
-    }
-
-    private var progressWidth: CGFloat {
-        guard !practiceWords.isEmpty else { return 0 }
-        let answeredBoost = lastAnswerWasCorrect == nil ? 0.0 : 1.0
-        return CGFloat(min((Double(index) + answeredBoost) / Double(practiceWords.count), 1))
-    }
-
-    private var focusWordCard: some View {
-        VStack(spacing: 11) {
-            HStack {
-                CapsuleMetric(icon: "graduationcap", title: "\(currentWord.level.tag) \(currentWord.level.title(for: language))")
-                    .colorScheme(.dark)
-                Spacer()
-                CapsuleMetric(icon: "chart.line.uptrend.xyaxis", title: "\(profile.wordProgress[currentWord.id]?.mastery ?? 0)%")
-                    .colorScheme(.dark)
-            }
-
-            Text(currentWord.english)
-                .font(.system(size: 44, weight: .black, design: .serif))
-                .minimumScaleFactor(0.62)
-                .lineLimit(1)
-
-            Text(currentWord.russian)
-                .font(.system(size: 20, weight: .black, design: .rounded))
-
-            Text(currentWord.definition(for: language))
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(.black.opacity(0.62))
-                .multilineTextAlignment(.center)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity)
-        .background(AtlasColors.mint.opacity(0.8))
-        .clipShape(RoundedRectangle(cornerRadius: 27, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 27, style: .continuous)
-                .stroke(AtlasColors.line, lineWidth: 2.4)
-        )
-        .shadow(color: AtlasColors.line, radius: 0, y: 6)
-    }
-
-    private func modeCard(_ mode: PracticeMode) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: mode.icon)
-                .font(.system(size: 26, weight: .black))
-                .frame(width: 46, height: 46)
-                .background(Circle().fill(AtlasColors.mint.opacity(0.55)))
-
-            Spacer(minLength: 2)
-
-            Text(mode.title(for: language))
-                .font(.system(size: 19, weight: .black, design: .rounded))
-                .lineLimit(2)
-                .minimumScaleFactor(0.78)
-
-            Text(mode.subtitle(for: language))
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(.black.opacity(0.58))
-                .lineLimit(3)
-        }
-        .foregroundStyle(.black)
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 168, alignment: .leading)
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.black.opacity(0.72), lineWidth: 2)
-        )
-        .shadow(color: .black.opacity(0.58), radius: 0, y: 5)
-    }
-
-    private var dueStrip: some View {
-        HStack(spacing: 12) {
-            miniMetric(
-                icon: "clock.arrow.circlepath",
-                title: language.text(ru: "К повторению", en: "Due"),
-                value: "\(profile.dueWordsCount)"
-            )
-            miniMetric(
-                icon: "exclamationmark.bubble",
-                title: language.text(ru: "Слабые", en: "Weak"),
-                value: "\(profile.weakWordIDs.count)"
-            )
-        }
-    }
-
-    private func miniMetric(icon: String, title: String, value: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .black))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                Text(title)
-                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                Text(language.text(ru: "Путь слова", en: "Word path"))
+                    .font(.system(size: 13, weight: .black, design: .rounded))
                     .foregroundStyle(.black.opacity(0.58))
             }
-            Spacer()
         }
         .foregroundStyle(.black)
-        .padding(13)
-        .frame(maxWidth: .infinity)
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(AtlasColors.line, lineWidth: 2)
-        )
+        .padding(.horizontal, AtlasLayout.screenPadding)
+        .padding(.top, 12)
+        .padding(.bottom, 7)
     }
+}
 
-    private func choiceChallenge(
-        prompt: String,
-        hero: String,
-        detail: String,
-        choices: [String],
-        correctAnswer: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(prompt)
-                .font(.system(size: 19, weight: .black, design: .rounded))
-                .foregroundStyle(.black)
-                .fixedSize(horizontal: false, vertical: true)
+private struct PracticeStepRail: View {
+    let steps: [PracticeStep]
+    let currentStep: PracticeStep
 
-            VStack(spacing: 10) {
-                Text(hero)
-                    .font(.system(size: hero.count > 12 ? 38 : 46, weight: .black, design: .serif))
-                    .foregroundStyle(.black)
-                    .minimumScaleFactor(0.55)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(steps) { step in
+                let isActive = step == currentStep
 
-                Text(detail)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.6))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 25)
-            .padding(.horizontal, 12)
-            .background(AtlasColors.mint.opacity(0.72))
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(AtlasColors.line, lineWidth: 2.5)
-            )
-            .shadow(color: AtlasColors.line, radius: 0, y: 6)
-
-            VStack(spacing: 12) {
-                ForEach(choices, id: \.self) { choice in
-                    answerButton(choice, correctAnswer: correctAnswer)
-                }
-            }
-
-            Button {
-                selectAnswer("", correctAnswer: correctAnswer)
-            } label: {
-                Text(language.text(ru: "Не помню", en: "I do not remember"))
-                    .font(.system(size: 15, weight: .black, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.64))
+                Image(systemName: step.icon)
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(isActive ? .white : .black.opacity(0.52))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.plain)
-            .disabled(selectedChoice != nil)
-        }
-    }
-
-    private var sentenceBuilderChallenge: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(language.text(ru: "Собери предложение", en: "Build the sentence"))
-                .font(.system(size: 19, weight: .black, design: .rounded))
-                .foregroundStyle(.black)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text(currentWord.exampleRU)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.62))
-
-                Text(selectedTiles.isEmpty ? " " : selectedTiles.joined(separator: " "))
-                    .font(.system(size: 24, weight: .black, design: .serif))
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: .infinity, minHeight: 86, alignment: .topLeading)
-                    .padding(14)
-                    .background(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+                    .frame(height: 32)
+                    .background(isActive ? AtlasColors.ink : Color.white.opacity(0.68))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 23, style: .continuous)
-                            .stroke(AtlasColors.line, lineWidth: 2)
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .stroke(.black.opacity(isActive ? 0.84 : 0.2), lineWidth: 1.5)
                     )
             }
-            .padding(16)
-            .background(AtlasColors.mint.opacity(0.72))
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(AtlasColors.line, lineWidth: 2.5)
-            )
-            .shadow(color: AtlasColors.line, radius: 0, y: 6)
+        }
+    }
+}
 
-            FlexibleTileWrap(items: remainingTiles) { tile in
-                Button {
-                    chooseTile(tile)
-                } label: {
-                    Text(tile)
-                        .font(.system(size: 16, weight: .black, design: .rounded))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(AtlasColors.line, lineWidth: 2)
-                        )
-                        .shadow(color: AtlasColors.line, radius: 0, y: 4)
+private struct TargetWordCapsule: View {
+    let word: WordEntry
+    let language: AppLanguage
+    let mastery: Int
+    let speak: () -> Void
+
+    var body: some View {
+        HStack(spacing: 11) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Text(word.english)
+                        .font(.system(size: 22, weight: .black, design: .serif))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.66)
+
+                    Text(word.level.tag)
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(AtlasColors.mint.opacity(0.6)))
                 }
-                .buttonStyle(.plain)
-                .disabled(lastAnswerWasCorrect != nil)
+
+                Text("\(word.russian) · \(word.ipa) · \(mastery)%")
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.6))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
             }
 
+            Spacer()
+
+            Button(action: speak) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(.black)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(.white))
+                    .overlay(Circle().stroke(.black, lineWidth: 2))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.84))
+        .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 19, style: .continuous)
+                .stroke(AtlasColors.line, lineWidth: 2)
+        )
+        .shadow(color: AtlasColors.line.opacity(0.55), radius: 0, y: 3)
+    }
+}
+
+private struct StartWordCard: View {
+    let word: WordEntry
+    let language: AppLanguage
+    let mastery: Int
+    let speak: () -> Void
+    let start: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 13) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(word.english)
+                        .font(.system(size: word.english.count > 13 ? 34 : 42, weight: .black, design: .serif))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.58)
+
+                    Text("\(word.russian) · \(word.ipa)")
+                        .font(.system(size: 15, weight: .black, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.65))
+                }
+
+                Spacer()
+
+                Button(action: speak) {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundStyle(.black)
+                        .frame(width: 54, height: 54)
+                        .background(Circle().fill(.white))
+                        .overlay(Circle().stroke(.black, lineWidth: 2))
+                        .shadow(color: .black.opacity(0.34), radius: 0, y: 4)
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 8) {
+                CapsuleMetric(icon: "flag.checkered", title: word.level.tag)
+                CapsuleMetric(icon: "target", title: "\(mastery)%")
+                CapsuleMetric(icon: "square.grid.2x2", title: WordBank.topicTitle(word.topic, for: language))
+            }
+
+            Text(word.definition(for: language))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(.black.opacity(0.72))
+                .lineSpacing(3)
+
+            ExampleCard(title: language.text(ru: "Контекст", en: "Context"), text: word.example(for: language))
+
+            if !word.collocations.isEmpty || !word.hints.isEmpty {
+                FlexibleChipWrap(items: Array((word.collocations + word.hints).prefix(6)))
+            }
+
+            Button(action: start) {
+                HStack(spacing: 9) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 18, weight: .black))
+                    Text(language.text(ru: "Начать вопросы", en: "Start questions"))
+                        .font(.system(size: 17, weight: .black, design: .rounded))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(AtlasColors.ink)
+                .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .shadow(color: .black.opacity(0.36), radius: 0, y: 5)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 2)
+        }
+        .lessonSurface()
+    }
+}
+
+private struct ChoiceExerciseView: View {
+    let title: String
+    let prompt: String
+    let focusText: String
+    let detail: String
+    let choices: [String]
+    let correctAnswer: String
+    let selectedChoice: String?
+    let feedback: PracticeFeedback?
+    let choose: (String, String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ExerciseTitle(title: title, subtitle: prompt)
+
+            Text(focusText)
+                .font(.system(size: focusText.count > 18 ? 28 : 38, weight: .black, design: .serif))
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 72)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.58)
+                .padding(.horizontal, 14)
+                .background(AtlasColors.mint.opacity(0.32))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(.black.opacity(0.36), lineWidth: 1.6)
+                )
+
+            Text(detail)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(.black.opacity(0.58))
+                .lineLimit(2)
+
+            VStack(spacing: 10) {
+                ForEach(choices, id: \.self) { choice in
+                    ChoiceRow(
+                        choice: choice,
+                        correctAnswer: correctAnswer,
+                        selectedChoice: selectedChoice,
+                        isLocked: feedback != nil
+                    ) { selected in
+                        choose(selected, correctAnswer)
+                    }
+                }
+            }
+        }
+        .lessonSurface()
+    }
+}
+
+private struct TileExerciseView: View {
+    let title: String
+    let prompt: String
+    let helper: String
+    let selectedTiles: [String]
+    let remainingTiles: [String]
+    let isLocked: Bool
+    let playAction: (() -> Void)?
+    let chooseTile: (String, Int) -> Void
+    let removeTile: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ExerciseTitle(title: title, subtitle: prompt)
+
+            if let playAction {
+                Button(action: playAction) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "waveform.circle.fill")
+                            .font(.system(size: 36, weight: .black))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Play")
+                                .font(.system(size: 18, weight: .black, design: .rounded))
+                            Text(helper)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(.black.opacity(0.6))
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+                    }
+                    .foregroundStyle(.black)
+                    .padding(13)
+                    .background(AtlasColors.coral.opacity(0.2))
+                    .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 19, style: .continuous)
+                            .stroke(AtlasColors.line, lineWidth: 2)
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(helper)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.58))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                if selectedTiles.isEmpty {
+                    Text("Tap tiles")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.38))
+                        .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+                } else {
+                    FlexibleIndexedTileWrap(items: selectedTiles) { index, tile in
+                        TileButton(title: tile, fill: AtlasColors.mint.opacity(0.52)) {
+                            removeTile(index)
+                        }
+                        .disabled(isLocked)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+                }
+            }
+            .padding(13)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(AtlasColors.line, lineWidth: 2)
+            )
+
+            FlexibleIndexedTileWrap(items: remainingTiles) { index, tile in
+                TileButton(title: tile, fill: .white) {
+                    chooseTile(tile, index)
+                }
+                .disabled(isLocked)
+            }
+        }
+        .lessonSurface()
+    }
+}
+
+private struct SpeechRepeatChallenge: View {
+    let word: WordEntry
+    let language: AppLanguage
+    let target: String
+    @ObservedObject var speech: AtlasSpeechRecognition
+    let isLocked: Bool
+    let playAction: () -> Void
+    let recordAction: () -> Void
+    let stopAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ExerciseTitle(
+                title: PracticeStep.speechRepeat.title(for: language),
+                subtitle: language.text(ru: "Произнеси цель четко и коротко.", en: "Say the target clearly and briefly.")
+            )
+
             HStack(spacing: 12) {
-                Button {
-                    resetTiles()
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(target)
+                        .font(.system(size: target.count > 16 ? 30 : 40, weight: .black, design: .serif))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.58)
+
+                    Text(word.exampleEN)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.58))
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Button(action: playAction) {
+                    Image(systemName: "speaker.wave.2.fill")
                         .font(.system(size: 18, weight: .black))
                         .foregroundStyle(.black)
-                        .frame(width: 52, height: 52)
+                        .frame(width: 46, height: 46)
                         .background(Circle().fill(.white))
                         .overlay(Circle().stroke(AtlasColors.line, lineWidth: 2))
                 }
                 .buttonStyle(.plain)
-                .disabled(selectedTiles.isEmpty || lastAnswerWasCorrect != nil)
-
-                Button {
-                    submitSentence()
-                } label: {
-                    Text(language.text(ru: "Проверить", en: "Check"))
-                        .font(.system(size: 17, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(remainingTiles.isEmpty ? AtlasColors.ink : Color.black.opacity(0.28))
-                        .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .disabled(!remainingTiles.isEmpty || lastAnswerWasCorrect != nil)
             }
+            .padding(14)
+            .background(AtlasColors.mint.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(.black.opacity(0.36), lineWidth: 1.6)
+            )
+
+            Button(action: speech.state == .recording ? stopAction : recordAction) {
+                HStack(spacing: 11) {
+                    Image(systemName: speech.state == .recording ? "stop.circle.fill" : "mic.circle.fill")
+                        .font(.system(size: 31, weight: .black))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(buttonTitle)
+                            .font(.system(size: 18, weight: .black, design: .rounded))
+                        Text(statusText)
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundStyle(.black.opacity(0.62))
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+                }
+                .foregroundStyle(.black)
+                .padding(14)
+                .background(buttonFill)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(AtlasColors.line, lineWidth: 2)
+                )
+                .shadow(color: .black.opacity(speech.state == .recording ? 0.55 : 0.32), radius: 0, y: 4)
+            }
+            .buttonStyle(.plain)
+            .disabled(isLocked || speech.state == .requestingPermission || speech.canSkip)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(language.text(ru: "Распознано", en: "Transcript"))
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.48))
+
+                Text(speech.transcript.isEmpty ? language.text(ru: "Здесь появится то, что услышит iPhone.", en: "What iPhone hears will appear here.") : speech.transcript)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(speech.transcript.isEmpty ? .black.opacity(0.4) : .black)
+                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .topLeading)
+            }
+            .padding(13)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(.black.opacity(0.2), lineWidth: 1.4)
+            )
+        }
+        .lessonSurface()
+    }
+
+    private var buttonTitle: String {
+        switch speech.state {
+        case .recording:
+            language.text(ru: "Остановить запись", en: "Stop recording")
+        case .requestingPermission:
+            language.text(ru: "Запрашиваю доступ", en: "Requesting access")
+        case .denied, .unavailable, .failed:
+            language.text(ru: "Можно пропустить", en: "You can skip")
+        case .recognized:
+            language.text(ru: "Записать заново", en: "Record again")
+        case .idle:
+            language.text(ru: "Начать запись", en: "Start recording")
         }
     }
 
-    private func answerButton(_ choice: String, correctAnswer: String) -> some View {
-        let isSelected = selectedChoice == choice
-        let isCorrectChoice = choice == correctAnswer
-        let fill: Color = {
-            guard selectedChoice != nil else { return .white }
-            if isSelected && isCorrectChoice { return AtlasColors.green.opacity(0.28) }
-            if isSelected && !isCorrectChoice { return AtlasColors.coral.opacity(0.35) }
-            if isCorrectChoice { return AtlasColors.green.opacity(0.18) }
-            return .white
-        }()
+    private var statusText: String {
+        switch speech.state {
+        case .idle:
+            language.text(ru: "Запись короткая: около трех секунд.", en: "A short recording: about three seconds.")
+        case .requestingPermission:
+            language.text(ru: "Нужны микрофон и распознавание речи.", en: "Microphone and speech recognition are needed.")
+        case .recording:
+            language.text(ru: "Говори сейчас.", en: "Speak now.")
+        case .recognized:
+            language.text(ru: "Проверь распознанный текст ниже.", en: "Check the transcript below.")
+        case .denied:
+            language.text(ru: "Доступ запрещен в настройках.", en: "Access is denied in Settings.")
+        case .unavailable:
+            language.text(ru: "Распознавание сейчас недоступно.", en: "Speech recognition is unavailable right now.")
+        case .failed(let message):
+            message
+        }
+    }
 
-        return Button {
-            selectAnswer(choice, correctAnswer: correctAnswer)
+    private var buttonFill: Color {
+        switch speech.state {
+        case .recording:
+            AtlasColors.coral.opacity(0.32)
+        case .denied, .unavailable, .failed:
+            Color.white.opacity(0.58)
+        case .idle, .requestingPermission, .recognized:
+            AtlasColors.mint.opacity(0.42)
+        }
+    }
+}
+
+private struct ExerciseTitle: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 20, weight: .black, design: .rounded))
+            Text(subtitle)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.black.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct ChoiceRow: View {
+    let choice: String
+    let correctAnswer: String
+    let selectedChoice: String?
+    let isLocked: Bool
+    let choose: (String) -> Void
+
+    private var isSelected: Bool {
+        selectedChoice == choice
+    }
+
+    private var isCorrectChoice: Bool {
+        choice.localizedCaseInsensitiveCompare(correctAnswer) == .orderedSame
+    }
+
+    private var fill: Color {
+        guard isLocked else { return .white }
+        if isSelected && isCorrectChoice { return AtlasColors.green.opacity(0.32) }
+        if isSelected && !isCorrectChoice { return AtlasColors.coral.opacity(0.34) }
+        if isCorrectChoice { return AtlasColors.green.opacity(0.18) }
+        return .white.opacity(0.78)
+    }
+
+    var body: some View {
+        Button {
+            AtlasHaptics.selection()
+            choose(choice)
         } label: {
             HStack(spacing: 10) {
                 Text(choice)
-                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .font(.system(size: 16, weight: .black, design: .rounded))
                     .foregroundStyle(.black)
                     .lineLimit(2)
-                    .minimumScaleFactor(0.74)
+                    .minimumScaleFactor(0.72)
 
                 Spacer()
 
-                if selectedChoice != nil {
-                    Image(systemName: isCorrectChoice ? "checkmark.circle.fill" : "circle")
+                if isLocked {
+                    Image(systemName: isCorrectChoice ? "checkmark.circle.fill" : (isSelected ? "xmark.circle.fill" : "circle"))
                         .font(.system(size: 20, weight: .black))
-                        .foregroundStyle(isCorrectChoice ? AtlasColors.green : .black.opacity(0.18))
+                        .foregroundStyle(isCorrectChoice ? AtlasColors.green : (isSelected ? AtlasColors.coral : .black.opacity(0.2)))
                 }
             }
             .padding(.horizontal, 15)
-            .padding(.vertical, 15)
+            .padding(.vertical, 13)
             .background(fill)
-            .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 21, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(AtlasColors.line, lineWidth: 2)
             )
-            .shadow(color: AtlasColors.line, radius: 0, y: 5)
+            .shadow(color: .black.opacity(0.42), radius: 0, y: isLocked ? 0 : 4)
         }
         .buttonStyle(.plain)
-        .disabled(selectedChoice != nil)
+        .disabled(isLocked)
+    }
+}
+
+private struct ActionPanel: View {
+    let language: AppLanguage
+    let step: PracticeStep
+    let canSubmit: Bool
+    let canResetTiles: Bool
+    let canSkip: Bool
+    let resetAction: () -> Void
+    let skipAction: () -> Void
+    let submitAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if canResetTiles {
+                Button(action: resetAction) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(.black)
+                        .frame(width: 50, height: 50)
+                        .background(Circle().fill(.white))
+                        .overlay(Circle().stroke(AtlasColors.line, lineWidth: 2))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if canSkip {
+                Button(action: skipAction) {
+                    Image(systemName: "forward.end.fill")
+                        .font(.system(size: 17, weight: .black))
+                        .foregroundStyle(.black)
+                        .frame(width: 50, height: 50)
+                        .background(Circle().fill(.white))
+                        .overlay(Circle().stroke(AtlasColors.line, lineWidth: 2))
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button(action: submitAction) {
+                HStack(spacing: 9) {
+                    Image(systemName: canSubmit ? "checkmark.circle.fill" : "hand.tap")
+                        .font(.system(size: 17, weight: .black))
+                    Text(buttonTitle)
+                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
+                .foregroundStyle(canSubmit ? .white : .black.opacity(0.46))
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(canSubmit ? AtlasColors.ink : Color.white.opacity(0.58))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(canSubmit ? .black : .black.opacity(0.18), lineWidth: 2)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSubmit)
+        }
+        .padding(.horizontal, AtlasLayout.screenPadding)
+        .padding(.vertical, 14)
     }
 
-    private func feedbackBar(isCorrect: Bool) -> some View {
+    private var buttonTitle: String {
+        switch step {
+        case .meaningChoice, .clozeWord:
+            language.text(ru: "Выбери вариант выше", en: "Choose an option above")
+        default:
+            step.actionTitle(for: language)
+        }
+    }
+}
+
+private struct FeedbackPanel: View {
+    let feedback: PracticeFeedback
+    let language: AppLanguage
+    let continueAction: () -> Void
+
+    var body: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: isCorrect ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 23, weight: .bold))
+            HStack(spacing: 11) {
+                Image(systemName: icon)
+                    .font(.system(size: 25, weight: .black))
+                    .foregroundStyle(color)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(isCorrect ? language.text(ru: "Верно", en: "Correct") : language.text(ru: "Запомним это слово", en: "We will remember this word"))
-                        .font(.system(size: 17, weight: .black, design: .rounded))
-
-                    Text(lastAnswerText)
+                    Text(feedback.title)
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                    Text(feedback.detail)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .opacity(0.78)
+                        .foregroundStyle(.black.opacity(0.68))
                         .lineLimit(2)
                 }
 
                 Spacer()
             }
 
-            Button {
-                AtlasHaptics.tap()
-                continuePractice()
-            } label: {
+            Button(action: continueAction) {
                 Text(language.text(ru: "Продолжить", en: "Continue"))
-                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .font(.system(size: 17, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(isCorrect ? AtlasColors.green : AtlasColors.ink)
-                    .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    .frame(height: 50)
+                    .background(feedback.isCorrect ? AtlasColors.green : AtlasColors.ink)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .buttonStyle(.plain)
         }
         .foregroundStyle(.black)
         .padding(.horizontal, AtlasLayout.screenPadding)
-        .padding(.vertical, 16)
-        .background(AtlasColors.paper)
-        .overlay(Rectangle().fill(.black.opacity(0.08)).frame(height: 1), alignment: .top)
+        .padding(.vertical, 14)
     }
 
-    private var completionView: some View {
-        VStack(spacing: 20) {
+    private var icon: String {
+        if feedback.wasSkipped { return "forward.end.fill" }
+        return feedback.isCorrect ? "checkmark.seal.fill" : "xmark.octagon.fill"
+    }
+
+    private var color: Color {
+        if feedback.wasSkipped { return AtlasColors.ink }
+        return feedback.isCorrect ? AtlasColors.green : AtlasColors.coral
+    }
+}
+
+private struct LessonSummaryView: View {
+    let language: AppLanguage
+    let session: PracticeSession
+    let levelTag: String
+    let score: Int
+    let dismiss: () -> Void
+
+    private var accuracy: Int {
+        guard session.scoredCount > 0 else { return 0 }
+        return Int((Double(session.correctCount) / Double(session.scoredCount)) * 100)
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
             Spacer()
 
             ZStack {
-                TinyDotsShadow()
-                    .frame(width: 144, height: 68)
-                    .offset(y: 42)
-
                 Circle()
                     .fill(AtlasColors.mint)
-                    .frame(width: 120, height: 120)
+                    .frame(width: 132, height: 132)
                     .overlay(Circle().stroke(.black, lineWidth: 3))
                     .shadow(color: AtlasColors.line, radius: 0, y: 8)
 
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 60, weight: .black))
+                Image(systemName: session.hearts == 0 ? "heart.slash.fill" : "checkmark.seal.fill")
+                    .font(.system(size: 62, weight: .black))
                     .foregroundStyle(.black)
             }
 
-            Text(language.text(ru: "Тренировка завершена", en: "Practice complete"))
-                .font(.system(size: 30, weight: .black, design: .serif))
+            Text(session.hearts == 0 ? language.text(ru: "Тренировка остановлена", en: "Practice paused") : language.text(ru: "Путь слова завершен", en: "Word path complete"))
+                .font(.system(size: 31, weight: .black, design: .serif))
                 .foregroundStyle(.black)
                 .multilineTextAlignment(.center)
 
             Text(language.text(
-                ru: "Слова пересортированы: слабые вернутся раньше, уверенные уйдут дальше по расписанию.",
-                en: "Words were resorted: weak words return sooner, strong words move further out."
+                ru: "XP начисляется только за активные ответы. Слабые шаги вернут слово раньше.",
+                en: "XP is awarded only for active answers. Weak steps bring the word back sooner."
             ))
-            .font(.system(size: 15, weight: .medium, design: .rounded))
+            .font(.system(size: 15, weight: .semibold, design: .rounded))
             .foregroundStyle(.black.opacity(0.62))
             .multilineTextAlignment(.center)
             .lineSpacing(4)
 
             HStack(spacing: 12) {
-                finishMetric(title: "XP", value: "+\(sessionXP)", icon: "bolt.fill")
-                finishMetric(title: language.text(ru: "Уровень", en: "Level"), value: profile.currentLevel.tag, icon: "flag.checkered")
+                SummaryMetric(icon: "bolt.fill", title: "XP", value: "+\(session.xp)")
+                SummaryMetric(icon: "target", title: language.text(ru: "Точность", en: "Accuracy"), value: "\(accuracy)%")
+                SummaryMetric(icon: "flag.checkered", title: language.text(ru: "Уровень", en: "Level"), value: "\(levelTag) \(score)")
             }
-            .padding(.top, 6)
 
-            Button {
-                AtlasHaptics.tap()
-                dismiss()
-            } label: {
-                Text(language.text(ru: "Вернуться к словам", en: "Back to words"))
+            Button(action: dismiss) {
+                Text(language.text(ru: "Вернуться", en: "Back"))
                     .font(.system(size: 17, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -591,151 +1232,145 @@ struct PracticeView: View {
                     .shadow(color: .black.opacity(0.36), radius: 0, y: 5)
             }
             .buttonStyle(.plain)
-            .padding(.top, 6)
+            .padding(.top, 4)
 
             Spacer()
         }
+        .foregroundStyle(.black)
         .padding(.horizontal, AtlasLayout.screenPadding)
-        .padding(.vertical, 20)
+        .padding(.vertical, 22)
     }
+}
 
-    private func finishMetric(title: String, value: String, icon: String) -> some View {
-        VStack(spacing: 8) {
+private struct SummaryMetric: View {
+    let icon: String
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 7) {
             Image(systemName: icon)
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(AtlasColors.green)
-
+                .font(.system(size: 20, weight: .black))
             Text(value)
-                .font(.system(size: 25, weight: .black, design: .rounded))
-
+                .font(.system(size: 20, weight: .black, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(title)
-                .font(.system(size: 13, weight: .black, design: .rounded))
+                .font(.system(size: 11, weight: .black, design: .rounded))
                 .foregroundStyle(.black.opacity(0.58))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 15)
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+        .padding(.vertical, 14)
+        .background(.white.opacity(0.84))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 21, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(AtlasColors.line, lineWidth: 2)
         )
-        .shadow(color: AtlasColors.line, radius: 0, y: 5)
+        .shadow(color: AtlasColors.line.opacity(0.7), radius: 0, y: 4)
     }
+}
 
-    private func alignStartWord() {
-        guard let startWordID,
-              let startIndex = practiceWords.firstIndex(where: { $0.id == startWordID })
-        else {
-            return
+private struct ExampleCard: View {
+    let title: String
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 12, weight: .black, design: .rounded))
+                .foregroundStyle(.black.opacity(0.48))
+            Text(text)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(.black)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
-
-        index = startIndex
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(.white.opacity(0.82))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.black.opacity(0.18), lineWidth: 1.4)
+        )
     }
+}
 
-    private func startChallenge(_ mode: PracticeMode) {
-        AtlasHaptics.selection()
-        withAnimation(.atlasSpring) {
-            selectedMode = mode
-            selectedChoice = nil
-            selectedTiles = []
-            lastAnswerWasCorrect = nil
-            lastAnswerText = ""
-            remainingTiles = mode == .sentenceBuilder ? WordBank.sentenceTiles(for: currentWord) : []
-        }
-    }
+private struct FlexibleChipWrap: View {
+    let items: [String]
 
-    private func selectAnswer(_ choice: String, correctAnswer: String) {
-        guard selectedChoice == nil, let selectedMode else { return }
-
-        let isCorrect = choice == correctAnswer
-        commitAnswer(isCorrect: isCorrect, mode: selectedMode)
-
-        withAnimation(.atlasSpring) {
-            selectedChoice = choice
-            lastAnswerWasCorrect = isCorrect
-            lastAnswerText = "\(currentWord.english) - \(currentWord.russian)"
-        }
-    }
-
-    private func chooseTile(_ tile: String) {
-        guard let index = remainingTiles.firstIndex(of: tile) else { return }
-        AtlasHaptics.selection()
-        withAnimation(.atlasSpring) {
-            selectedTiles.append(tile)
-            remainingTiles.remove(at: index)
-        }
-    }
-
-    private func resetTiles() {
-        AtlasHaptics.tap()
-        withAnimation(.atlasSpring) {
-            selectedTiles = []
-            remainingTiles = WordBank.sentenceTiles(for: currentWord)
-        }
-    }
-
-    private func submitSentence() {
-        guard selectedMode == .sentenceBuilder, lastAnswerWasCorrect == nil else { return }
-        let answer = selectedTiles.joined(separator: " ")
-        let correct = WordBank.sentenceAnswer(for: currentWord)
-        let isCorrect = answer == correct
-        commitAnswer(isCorrect: isCorrect, mode: .sentenceBuilder)
-
-        withAnimation(.atlasSpring) {
-            lastAnswerWasCorrect = isCorrect
-            lastAnswerText = correct
-        }
-    }
-
-    private func commitAnswer(isCorrect: Bool, mode: PracticeMode) {
-        if isCorrect {
-            AtlasHaptics.success()
-        } else {
-            AtlasHaptics.error()
-            hearts = max(0, hearts - 1)
-        }
-
-        let xp = profile.recordPractice(word: currentWord, mode: mode, isCorrect: isCorrect)
-        sessionXP += xp
-    }
-
-    private func continuePractice() {
-        withAnimation(.atlasSpring) {
-            selectedChoice = nil
-            selectedTiles = []
-            remainingTiles = []
-            lastAnswerWasCorrect = nil
-            lastAnswerText = ""
-            selectedMode = nil
-        }
-
-        if hearts == 0 || index >= practiceWords.count - 1 {
-            finishSession()
-        } else {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.84)) {
-                index += 1
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 8)], alignment: .leading, spacing: 8) {
+            ForEach(items, id: \.self) { item in
+                Text(item)
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(AtlasColors.mint.opacity(0.38))
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .stroke(.black.opacity(0.2), lineWidth: 1.2)
+                    )
             }
-        }
-    }
-
-    private func finishSession() {
-        AtlasHaptics.success()
-        withAnimation(.atlasSoftSpring) {
-            isFinished = true
         }
     }
 }
 
-struct FlexibleTileWrap<Content: View>: View {
+private struct FlexibleIndexedTileWrap<Content: View>: View {
     let items: [String]
-    @ViewBuilder let content: (String) -> Content
+    @ViewBuilder let content: (Int, String) -> Content
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 10)], alignment: .leading, spacing: 10) {
-            ForEach(items, id: \.self) { item in
-                content(item)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 9)], alignment: .leading, spacing: 9) {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                content(index, item)
             }
         }
+    }
+}
+
+private struct TileButton: View {
+    let title: String
+    let fill: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 15, weight: .black, design: .rounded))
+                .foregroundStyle(.black)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(fill)
+                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(AtlasColors.line, lineWidth: 2)
+                )
+                .shadow(color: .black.opacity(0.42), radius: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private extension View {
+    func lessonSurface() -> some View {
+        padding(15)
+            .background(.white.opacity(0.76))
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(AtlasColors.line, lineWidth: 2.1)
+            )
+            .shadow(color: AtlasColors.line.opacity(0.64), radius: 0, y: 5)
     }
 }

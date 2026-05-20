@@ -18,6 +18,7 @@ struct HomeView: View {
     @State private var showsStats = false
     @State private var showsDailyProgress = false
     @State private var selectedInfoWord: WordEntry?
+    @State private var selectedPracticeWord: WordEntry?
 
     private var dailyWords: [WordEntry] {
         profile.dailyWords
@@ -83,6 +84,13 @@ struct HomeView: View {
                 profile: $profile,
                 words: dailyWords,
                 startWordID: currentWord.id
+            )
+        }
+        .fullScreenCover(item: $selectedPracticeWord) { word in
+            PracticeView(
+                profile: $profile,
+                words: [word],
+                startWordID: word.id
             )
         }
         .sheet(isPresented: $showsWordBank) {
@@ -276,9 +284,13 @@ struct HomeView: View {
     }
 
     private func actionRow(for word: WordEntry) -> some View {
-        HStack(spacing: 34) {
+        HStack(spacing: 22) {
             homeIconButton(systemName: "info", size: 48) {
                 selectedInfoWord = word
+            }
+
+            homeIconButton(systemName: "play.circle.fill", size: 48) {
+                selectedPracticeWord = word
             }
 
             homeIconButton(systemName: "checkmark.seal", size: 48) {

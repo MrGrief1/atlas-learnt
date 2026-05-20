@@ -7,3 +7,7 @@ Creative Commons Attribution-ShareAlike 3.0.
 Frequency ordering is assisted by the KvaytG English-Russian filtered
 dictionary corpus. Atlas Learn filters this data to remove proper names,
 abbreviations, machine-translation artifacts, and ambiguous test words.
+
+Additional frequency ranking for the expanded local training set is assisted
+by wordfreq, using its English frequency lists to prioritize common learner
+vocabulary before Atlas Learn applies CEFR, topic, and exercise filters.

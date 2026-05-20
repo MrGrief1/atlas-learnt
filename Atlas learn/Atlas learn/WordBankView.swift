@@ -28,6 +28,148 @@ enum WordBankFilter: String, CaseIterable, Identifiable {
 private enum WordBankPickerKind: Hashable {
     case level
     case topic
+    case sort
+}
+
+private enum WordBankSearchIndex {
+    static let searchableTextByID: [String: String] = Dictionary(uniqueKeysWithValues: WordBank.all.map { word in
+        (word.id, "\(word.english) \(word.russian) \(word.partOfSpeech) \(word.topic)".lowercased())
+    })
+
+    static let numericSuffixByID: [String: Int] = Dictionary(uniqueKeysWithValues: WordBank.all.map { word in
+        (word.id, Int(word.id.split(separator: "-").last ?? "") ?? 0)
+    })
+}
+
+private struct WordBankQueryContext {
+    let language: AppLanguage
+    let query: String
+    let filter: WordBankFilter
+    let sortOption: WordSortOption
+    let levelFilter: LearningLevel?
+    let topicFilter: String?
+    let savedIDs: Set<String>
+    let unknownIDs: Set<String>
+    let weakIDs: Set<String>
+    let selectedTopics: Set<String>
+    let memories: [String: WordMemory]
+    let currentLevel: LearningLevel
+
+    init(
+        language: AppLanguage,
+        searchText: String,
+        filter: WordBankFilter,
+        sortOption: WordSortOption,
+        levelFilter: LearningLevel?,
+        topicFilter: String?,
+        savedIDs: Set<String>,
+        unknownIDs: Set<String>,
+        weakIDs: Set<String>,
+        selectedTopics: Set<String>,
+        memories: [String: WordMemory],
+        currentLevel: LearningLevel
+    ) {
+        self.language = language
+        self.query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        self.filter = filter
+        self.sortOption = sortOption
+        self.levelFilter = levelFilter
+        self.topicFilter = topicFilter
+        self.savedIDs = savedIDs
+        self.unknownIDs = unknownIDs
+        self.weakIDs = weakIDs
+        self.selectedTopics = selectedTopics
+        self.memories = memories
+        self.currentLevel = currentLevel
+    }
+
+    func matches(_ word: WordEntry) -> Bool {
+        switch filter {
+        case .all:
+            break
+        case .saved:
+            guard savedIDs.contains(word.id) else { return false }
+        case .unknown:
+            guard unknownIDs.contains(word.id) else { return false }
+        case .weak:
+            guard weakIDs.contains(word.id) else { return false }
+        case .mastered:
+            guard (memories[word.id]?.mastery ?? 0) >= 70 else { return false }
+        }
+
+        if let levelFilter, word.level != levelFilter { return false }
+        if let topicFilter, word.topic != topicFilter { return false }
+        guard !query.isEmpty else { return true }
+        return WordBankSearchIndex.searchableTextByID[word.id]?.contains(query) == true
+    }
+
+    func sorted(_ words: [WordEntry]) -> [WordEntry] {
+        words.sorted(by: precedes)
+    }
+
+    private func precedes(_ left: WordEntry, _ right: WordEntry) -> Bool {
+        switch sortOption {
+        case .smart:
+            let leftScore = smartSortScore(for: left)
+            let rightScore = smartSortScore(for: right)
+            if leftScore != rightScore { return leftScore < rightScore }
+            return isAlphabeticallyBefore(left, right)
+        case .alphabetic:
+            return isAlphabeticallyBefore(left, right)
+        case .level:
+            if left.level != right.level { return left.level < right.level }
+            return isAlphabeticallyBefore(left, right)
+        case .masteryLow:
+            let leftMastery = memories[left.id]?.mastery ?? 0
+            let rightMastery = memories[right.id]?.mastery ?? 0
+            if leftMastery != rightMastery { return leftMastery < rightMastery }
+            return isAlphabeticallyBefore(left, right)
+        case .masteryHigh:
+            let leftMastery = memories[left.id]?.mastery ?? 0
+            let rightMastery = memories[right.id]?.mastery ?? 0
+            if leftMastery != rightMastery { return leftMastery > rightMastery }
+            return isAlphabeticallyBefore(left, right)
+        case .topic:
+            let leftTopic = WordBank.topicTitle(left.topic, for: language)
+            let rightTopic = WordBank.topicTitle(right.topic, for: language)
+            if leftTopic != rightTopic { return leftTopic < rightTopic }
+            return isAlphabeticallyBefore(left, right)
+        case .dueFirst:
+            let leftDue = memories[left.id]?.isDue() == true
+            let rightDue = memories[right.id]?.isDue() == true
+            if leftDue != rightDue { return leftDue && !rightDue }
+            let leftScore = smartSortScore(for: left)
+            let rightScore = smartSortScore(for: right)
+            if leftScore != rightScore { return leftScore < rightScore }
+            return isAlphabeticallyBefore(left, right)
+        case .newest:
+            let leftID = WordBankSearchIndex.numericSuffixByID[left.id] ?? 0
+            let rightID = WordBankSearchIndex.numericSuffixByID[right.id] ?? 0
+            if leftID != rightID { return leftID > rightID }
+            return isAlphabeticallyBefore(left, right)
+        }
+    }
+
+    private func smartSortScore(for word: WordEntry) -> Int {
+        let memory = memories[word.id]
+        let mastery = memory?.mastery ?? 0
+        var score = 0
+
+        if memory?.isDue() == true { score -= 700 }
+        if unknownIDs.contains(word.id) { score -= 500 }
+        if weakIDs.contains(word.id) { score -= 350 }
+        if savedIDs.contains(word.id) { score -= 80 }
+        if selectedTopics.contains(word.topic) { score -= 45 }
+
+        score += abs(word.level.order - currentLevel.order) * 90
+        score += mastery
+        score += (WordBankSearchIndex.numericSuffixByID[word.id] ?? 0) % 17
+        return score
+    }
+
+    private func isAlphabeticallyBefore(_ left: WordEntry, _ right: WordEntry) -> Bool {
+        left.english.localizedCaseInsensitiveCompare(right.english) == .orderedAscending
+    }
 }
 
 struct WordBankView: View {
@@ -37,42 +179,16 @@ struct WordBankView: View {
 
     @State private var searchText = ""
     @State private var filter: WordBankFilter = .all
+    @State private var sortOption: WordSortOption = .smart
     @State private var levelFilter: LearningLevel?
     @State private var topicFilter: String?
     @State private var expandedPicker: WordBankPickerKind?
+    @State private var selectedPracticeWord: WordEntry?
+    @State private var displayedWords: [WordEntry] = []
+    @State private var searchRefreshTask: Task<Void, Never>?
 
     private var language: AppLanguage {
         profile.appLanguage
-    }
-
-    private var filteredWords: [WordEntry] {
-        WordBank.all.filter { word in
-            let matchesFilter: Bool
-
-            switch filter {
-            case .all:
-                matchesFilter = true
-            case .saved:
-                matchesFilter = profile.savedWordIDs.contains(word.id)
-            case .unknown:
-                matchesFilter = profile.unknownWordIDs.contains(word.id)
-            case .weak:
-                matchesFilter = profile.weakWordIDs.contains(word.id)
-            case .mastered:
-                matchesFilter = (profile.wordProgress[word.id]?.mastery ?? 0) >= 70
-            }
-
-            guard matchesFilter else { return false }
-            if let levelFilter, word.level != levelFilter { return false }
-            if let topicFilter, word.topic != topicFilter { return false }
-
-            if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return true
-            }
-
-            let query = searchText.lowercased()
-            return word.english.lowercased().contains(query) || word.russian.lowercased().contains(query)
-        }
     }
 
     var body: some View {
@@ -130,8 +246,10 @@ struct WordBankView: View {
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 14) {
-                        ForEach(filteredWords) { word in
-                            WordBankRow(word: word, profile: $profile)
+                        ForEach(displayedWords) { word in
+                            WordBankRow(word: word, profile: $profile) {
+                                selectedPracticeWord = word
+                            }
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
@@ -145,83 +263,177 @@ struct WordBankView: View {
             .foregroundStyle(.black)
         }
         .atlasMotion(filter)
-        .atlasSoftMotion(searchText)
-        .atlasSoftMotion(profile)
+        .atlasMotion(sortOption)
+        .onAppear(perform: refreshDisplayedWords)
+        .onDisappear {
+            searchRefreshTask?.cancel()
+        }
+        .onChange(of: searchText) { _, _ in
+            scheduleSearchRefresh()
+        }
+        .onChange(of: filter) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: sortOption) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: levelFilter) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: topicFilter) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: profile.savedWordIDs) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: profile.unknownWordIDs) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: profile.wordProgress) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: profile.currentLevel) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: profile.selectedTopics) { _, _ in
+            refreshDisplayedWords()
+        }
+        .onChange(of: profile.appLanguage) { _, _ in
+            refreshDisplayedWords()
+        }
+        .fullScreenCover(item: $selectedPracticeWord) { word in
+            PracticeView(
+                profile: $profile,
+                words: [word],
+                startWordID: word.id
+            )
+        }
+    }
+
+    private func scheduleSearchRefresh() {
+        searchRefreshTask?.cancel()
+        searchRefreshTask = Task {
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                refreshDisplayedWords()
+            }
+        }
+    }
+
+    private func refreshDisplayedWords() {
+        searchRefreshTask?.cancel()
+        let context = WordBankQueryContext(
+            language: language,
+            searchText: searchText,
+            filter: filter,
+            sortOption: sortOption,
+            levelFilter: levelFilter,
+            topicFilter: topicFilter,
+            savedIDs: Set(profile.savedWordIDs),
+            unknownIDs: Set(profile.unknownWordIDs),
+            weakIDs: Set(profile.weakWordIDs),
+            selectedTopics: Set(profile.selectedTopics),
+            memories: profile.wordProgress,
+            currentLevel: profile.currentLevel
+        )
+
+        displayedWords = context.sorted(WordBank.all.filter(context.matches))
     }
 
     private var filterControls: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                filterSelector(
-                    kind: .level,
-                    icon: "slider.horizontal.3",
-                    title: language.text(ru: "Уровень", en: "Level"),
-                    value: levelFilter?.tag ?? language.text(ru: "Все", en: "All")
-                )
+        VStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 9) {
+                    countChip
 
-                filterSelector(
-                    kind: .topic,
-                    icon: "square.grid.2x2",
-                    title: language.text(ru: "Тема", en: "Topic"),
-                    value: topicFilter.map { WordBank.topicTitle($0, for: language) } ?? language.text(ru: "Все", en: "All")
-                )
+                    filterSelector(
+                        kind: .level,
+                        icon: "slider.horizontal.3",
+                        title: language.text(ru: "Уровень", en: "Level"),
+                        value: levelFilter?.tag ?? language.text(ru: "Все", en: "All")
+                    )
+                    .frame(width: 142)
 
-                Button {
-                    AtlasHaptics.selection()
-                    withAnimation(.atlasSpring) {
-                        levelFilter = nil
-                        topicFilter = nil
-                        expandedPicker = nil
+                    filterSelector(
+                        kind: .topic,
+                        icon: "square.grid.2x2",
+                        title: language.text(ru: "Тема", en: "Topic"),
+                        value: topicFilter.map { WordBank.topicTitle($0, for: language) } ?? language.text(ru: "Все", en: "All")
+                    )
+                    .frame(width: 166)
+
+                    filterSelector(
+                        kind: .sort,
+                        icon: sortOption.icon,
+                        title: language.text(ru: "Сортировка", en: "Sort"),
+                        value: sortOption.title(for: language)
+                    )
+                    .frame(width: 174)
+
+                    Button {
+                        AtlasHaptics.selection()
+                        withAnimation(.atlasSpring) {
+                            levelFilter = nil
+                            topicFilter = nil
+                            expandedPicker = nil
+                        }
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(.black)
+                            .frame(width: 46, height: 48)
+                            .background(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(AtlasColors.line, lineWidth: 2)
+                            )
                     }
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 17, weight: .black))
-                        .foregroundStyle(.black)
-                        .frame(width: 48, height: 54)
-                        .background(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(AtlasColors.line, lineWidth: 2)
-                        )
+                    .buttonStyle(.plain)
+                    .disabled(levelFilter == nil && topicFilter == nil)
+                    .opacity(levelFilter == nil && topicFilter == nil ? 0.45 : 1)
                 }
-                .buttonStyle(.plain)
-                .disabled(levelFilter == nil && topicFilter == nil)
-                .opacity(levelFilter == nil && topicFilter == nil ? 0.45 : 1)
+                .padding(.horizontal, 2)
             }
 
             if let expandedPicker {
                 customPicker(for: expandedPicker)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
-
-            HStack {
-                Text(language.text(ru: "Найдено", en: "Showing"))
-                    .font(.system(size: 12, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.56))
-
-                Text("\(filteredWords.count)")
-                    .font(.system(size: 14, weight: .black, design: .rounded))
-
-                Spacer()
-
-                if levelFilter != nil || topicFilter != nil {
-                    Text(language.text(ru: "Фильтр включен", en: "Filtered"))
-                        .font(.system(size: 12, weight: .black, design: .rounded))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(AtlasColors.mint.opacity(0.72)))
-                }
-            }
         }
-        .padding(11)
+        .padding(9)
         .background(AtlasColors.mint.opacity(0.34))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(AtlasColors.line, lineWidth: 2)
         )
         .atlasMotion(expandedPicker)
+    }
+
+    private var countChip: some View {
+        HStack(spacing: 7) {
+            Image(systemName: levelFilter != nil || topicFilter != nil ? "line.3.horizontal.decrease.circle.fill" : "number")
+                .font(.system(size: 15, weight: .black))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(language.text(ru: "Найдено", en: "Showing"))
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.56))
+                Text("\(displayedWords.count)")
+                    .font(.system(size: 15, weight: .black, design: .rounded))
+            }
+        }
+        .foregroundStyle(.black)
+        .padding(.horizontal, 12)
+        .frame(height: 48)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AtlasColors.line, lineWidth: 2)
+        )
     }
 
     private func filterSelector(
@@ -261,11 +473,11 @@ struct WordBankView: View {
             .foregroundStyle(.black)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
+            .frame(height: 48)
             .background(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(AtlasColors.line, lineWidth: 2)
             )
             .shadow(color: isExpanded ? AtlasColors.line.opacity(0.85) : .clear, radius: 0, y: 3)
@@ -319,6 +531,22 @@ struct WordBankView: View {
                         isSelected: topicFilter == topic
                     ) {
                         topicFilter = topic
+                        expandedPicker = nil
+                    }
+                }
+            }
+            .padding(10)
+            .customDropdownSurface()
+
+        case .sort:
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(WordSortOption.allCases) { option in
+                    pickerChip(
+                        title: option.title(for: language),
+                        icon: option.icon,
+                        isSelected: sortOption == option
+                    ) {
+                        sortOption = option
                         expandedPicker = nil
                     }
                 }
@@ -438,6 +666,7 @@ private extension View {
 struct WordBankRow: View {
     let word: WordEntry
     @Binding var profile: AtlasProfile
+    let practiceAction: () -> Void
 
     private var language: AppLanguage {
         profile.appLanguage
@@ -470,6 +699,21 @@ struct WordBankRow: View {
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.black.opacity(0.6))
                     .lineLimit(2)
+
+                Button {
+                    AtlasHaptics.tap()
+                    practiceAction()
+                } label: {
+                    Label(language.text(ru: "Проработать слово", en: "Practice this word"), systemImage: "play.circle.fill")
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(AtlasColors.mint.opacity(0.5))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(.black.opacity(0.28), lineWidth: 1.2))
+                }
+                .buttonStyle(.plain)
             }
 
             Spacer()

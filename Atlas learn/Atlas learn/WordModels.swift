@@ -169,55 +169,236 @@ enum LearningLevel: String, CaseIterable, Codable, Identifiable, Comparable {
 }
 
 enum PracticeMode: String, CaseIterable, Codable, Identifiable {
+    case wordReveal
+    case listenChoice
     case translateChoice
     case synonymMatch
     case sentenceBuilder
+    case sentenceCompose
     case clozeChoice
+    case meaningChoice
+    case ruToEnglishTiles
+    case listenTiles
+    case clozeWord
+    case wordOrder
+    case speechRepeat
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
+        case .wordReveal: "sparkle.magnifyingglass"
+        case .listenChoice: "speaker.wave.2"
         case .translateChoice: "text.bubble"
         case .synonymMatch: "link"
         case .sentenceBuilder: "square.grid.3x1.below.line.grid.1x2"
+        case .sentenceCompose: "pencil.and.scribble"
         case .clozeChoice: "text.cursor"
+        case .meaningChoice: "checklist"
+        case .ruToEnglishTiles: "translate"
+        case .listenTiles: "waveform"
+        case .clozeWord: "text.cursor"
+        case .wordOrder: "text.line.first.and.arrowtriangle.forward"
+        case .speechRepeat: "mic.fill"
         }
     }
 
     func title(for language: AppLanguage) -> String {
         switch self {
+        case .wordReveal:
+            language.text(ru: "Открытие", en: "Reveal")
+        case .listenChoice:
+            language.text(ru: "На слух", en: "Listen")
         case .translateChoice:
             language.text(ru: "Перевод", en: "Translation")
         case .synonymMatch:
             language.text(ru: "Синоним", en: "Synonym")
         case .sentenceBuilder:
             language.text(ru: "Собери фразу", en: "Build sentence")
+        case .sentenceCompose:
+            language.text(ru: "Своя фраза", en: "Own sentence")
         case .clozeChoice:
             language.text(ru: "Пропуск", en: "Fill the blank")
+        case .meaningChoice:
+            language.text(ru: "Смысл", en: "Meaning")
+        case .ruToEnglishTiles:
+            language.text(ru: "RU → EN", en: "RU → EN")
+        case .listenTiles:
+            language.text(ru: "На слух", en: "Listening")
+        case .clozeWord:
+            language.text(ru: "Пропуск", en: "Blank")
+        case .wordOrder:
+            language.text(ru: "Порядок слов", en: "Word order")
+        case .speechRepeat:
+            language.text(ru: "Произношение", en: "Speaking")
         }
     }
 
     func subtitle(for language: AppLanguage) -> String {
         switch self {
+        case .wordReveal:
+            language.text(ru: "Разбери значение и пример", en: "Study meaning and example")
+        case .listenChoice:
+            language.text(ru: "Узнай слово по произношению", en: "Recognize the spoken word")
         case .translateChoice:
             language.text(ru: "Выбери русский перевод", en: "Choose the Russian meaning")
         case .synonymMatch:
             language.text(ru: "Найди близкое английское слово", en: "Find the closest English word")
         case .sentenceBuilder:
             language.text(ru: "Расставь плитки по порядку", en: "Put the tiles in order")
+        case .sentenceCompose:
+            language.text(ru: "Напиши предложение со словом", en: "Write a sentence with the word")
         case .clozeChoice:
             language.text(ru: "Вставь слово в контекст", en: "Use the word in context")
+        case .meaningChoice:
+            language.text(ru: "Выбери точное значение слова", en: "Choose the exact meaning")
+        case .ruToEnglishTiles:
+            language.text(ru: "Собери английскую фразу по русской", en: "Build English from the Russian cue")
+        case .listenTiles:
+            language.text(ru: "Слушай фразу и собери ее", en: "Listen and assemble the phrase")
+        case .clozeWord:
+            language.text(ru: "Вставь слово в пропуск", en: "Put the word into the blank")
+        case .wordOrder:
+            language.text(ru: "Поставь слова в естественном порядке", en: "Put words in a natural order")
+        case .speechRepeat:
+            language.text(ru: "Повтори слово или короткую фразу", en: "Repeat the word or short phrase")
         }
     }
 
     var xpReward: Int {
         switch self {
+        case .wordReveal: 5
+        case .listenChoice: 10
         case .translateChoice: 10
         case .synonymMatch: 12
         case .sentenceBuilder: 15
+        case .sentenceCompose: 18
         case .clozeChoice: 14
+        case .meaningChoice: 8
+        case .ruToEnglishTiles: 12
+        case .listenTiles: 12
+        case .clozeWord: 10
+        case .wordOrder: 12
+        case .speechRepeat: 10
         }
+    }
+}
+
+enum PracticeStep: String, CaseIterable, Codable, Identifiable {
+    case meaningChoice
+    case ruToEnglishTiles
+    case listenTiles
+    case clozeWord
+    case wordOrder
+    case speechRepeat
+
+    var id: String { rawValue }
+
+    var mode: PracticeMode {
+        switch self {
+        case .meaningChoice: .meaningChoice
+        case .ruToEnglishTiles: .ruToEnglishTiles
+        case .listenTiles: .listenTiles
+        case .clozeWord: .clozeWord
+        case .wordOrder: .wordOrder
+        case .speechRepeat: .speechRepeat
+        }
+    }
+
+    var icon: String { mode.icon }
+
+    func title(for language: AppLanguage) -> String {
+        switch self {
+        case .meaningChoice:
+            language.text(ru: "Выбери смысл", en: "Choose meaning")
+        case .ruToEnglishTiles:
+            language.text(ru: "Собери перевод", en: "Build translation")
+        case .listenTiles:
+            language.text(ru: "Собери на слух", en: "Build by ear")
+        case .clozeWord:
+            language.text(ru: "Вставь слово", en: "Fill the word")
+        case .wordOrder:
+            language.text(ru: "Порядок слов", en: "Word order")
+        case .speechRepeat:
+            language.text(ru: "Повтори вслух", en: "Repeat aloud")
+        }
+    }
+
+    func subtitle(for language: AppLanguage) -> String {
+        switch self {
+        case .meaningChoice:
+            language.text(ru: "Слово сразу включается в проверку смысла.", en: "The word goes straight into meaning practice.")
+        case .ruToEnglishTiles:
+            language.text(ru: "Дана русская фраза, собери английскую.", en: "Use the Russian cue to build the English sentence.")
+        case .listenTiles:
+            language.text(ru: "Слушай английскую фразу и собери ее из плиток.", en: "Listen to the English sentence and assemble it.")
+        case .clozeWord:
+            language.text(ru: "Найди место слова внутри контекста.", en: "Place the target word inside context.")
+        case .wordOrder:
+            language.text(ru: "Собери естественный порядок слов.", en: "Assemble natural word order.")
+        case .speechRepeat:
+            language.text(ru: "Скажи слово или короткую фразу в микрофон.", en: "Say the word or a short phrase into the mic.")
+        }
+    }
+
+    func actionTitle(for language: AppLanguage) -> String {
+        switch self {
+        case .meaningChoice:
+            language.text(ru: "Выбери вариант", en: "Choose an option")
+        case .ruToEnglishTiles, .listenTiles, .clozeWord, .wordOrder:
+            language.text(ru: "Проверить", en: "Check")
+        case .speechRepeat:
+            language.text(ru: "Проверить речь", en: "Check speech")
+        }
+    }
+}
+
+struct PracticeStageResult: Codable, Equatable, Identifiable {
+    let id: UUID
+    let step: PracticeStep
+    let wordID: String
+    let isCorrect: Bool
+    let wasSkipped: Bool
+    let xp: Int
+    let createdAt: Date
+
+    init(
+        id: UUID = UUID(),
+        step: PracticeStep,
+        wordID: String,
+        isCorrect: Bool,
+        wasSkipped: Bool = false,
+        xp: Int,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.step = step
+        self.wordID = wordID
+        self.isCorrect = isCorrect
+        self.wasSkipped = wasSkipped
+        self.xp = xp
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case step
+        case wordID
+        case isCorrect
+        case wasSkipped
+        case xp
+        case createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        step = try container.decode(PracticeStep.self, forKey: .step)
+        wordID = try container.decode(String.self, forKey: .wordID)
+        isCorrect = try container.decode(Bool.self, forKey: .isCorrect)
+        wasSkipped = try container.decodeIfPresent(Bool.self, forKey: .wasSkipped) ?? false
+        xp = try container.decode(Int.self, forKey: .xp)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }
 
@@ -276,6 +457,13 @@ struct WordEntry: Codable, Hashable, Identifiable {
     let synonyms: [String]
     let sentenceTiles: [String]
     let clozeSentence: String
+    let hints: [String]
+    let collocations: [String]
+    let extraExamplesEN: [String]
+    let extraExamplesRU: [String]
+    let composePromptEN: String
+    let composePromptRU: String
+    let acceptedAnswers: [String]
 
     var cefrLevel: LearningLevel { level }
 
@@ -290,6 +478,10 @@ struct WordEntry: Codable, Hashable, Identifiable {
 
     func example(for language: AppLanguage) -> String {
         language.text(ru: exampleRU, en: exampleEN)
+    }
+
+    func composePrompt(for language: AppLanguage) -> String {
+        language.text(ru: composePromptRU, en: composePromptEN)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -308,6 +500,13 @@ struct WordEntry: Codable, Hashable, Identifiable {
         case synonyms
         case sentenceTiles
         case clozeSentence
+        case hints
+        case collocations
+        case extraExamplesEN
+        case extraExamplesRU
+        case composePromptEN
+        case composePromptRU
+        case acceptedAnswers
     }
 
     init(
@@ -324,7 +523,14 @@ struct WordEntry: Codable, Hashable, Identifiable {
         topic: String,
         synonyms: [String],
         sentenceTiles: [String],
-        clozeSentence: String
+        clozeSentence: String,
+        hints: [String] = [],
+        collocations: [String] = [],
+        extraExamplesEN: [String] = [],
+        extraExamplesRU: [String] = [],
+        composePromptEN: String = "",
+        composePromptRU: String = "",
+        acceptedAnswers: [String] = []
     ) {
         self.id = id
         self.english = english
@@ -340,6 +546,13 @@ struct WordEntry: Codable, Hashable, Identifiable {
         self.synonyms = synonyms
         self.sentenceTiles = sentenceTiles
         self.clozeSentence = clozeSentence
+        self.hints = hints
+        self.collocations = collocations
+        self.extraExamplesEN = extraExamplesEN
+        self.extraExamplesRU = extraExamplesRU
+        self.composePromptEN = composePromptEN.isEmpty ? "Write a short sentence with \(english)." : composePromptEN
+        self.composePromptRU = composePromptRU.isEmpty ? "Напиши короткое предложение со словом \(english)." : composePromptRU
+        self.acceptedAnswers = acceptedAnswers
     }
 
     init(from decoder: Decoder) throws {
@@ -360,6 +573,13 @@ struct WordEntry: Codable, Hashable, Identifiable {
         synonyms = try container.decodeIfPresent([String].self, forKey: .synonyms) ?? []
         sentenceTiles = try container.decodeIfPresent([String].self, forKey: .sentenceTiles) ?? exampleEN.split(separator: " ").map(String.init)
         clozeSentence = try container.decodeIfPresent(String.self, forKey: .clozeSentence) ?? exampleEN.replacingOccurrences(of: english, with: "____")
+        hints = try container.decodeIfPresent([String].self, forKey: .hints) ?? []
+        collocations = try container.decodeIfPresent([String].self, forKey: .collocations) ?? []
+        extraExamplesEN = try container.decodeIfPresent([String].self, forKey: .extraExamplesEN) ?? []
+        extraExamplesRU = try container.decodeIfPresent([String].self, forKey: .extraExamplesRU) ?? []
+        composePromptEN = try container.decodeIfPresent(String.self, forKey: .composePromptEN) ?? "Write a short sentence with \(english)."
+        composePromptRU = try container.decodeIfPresent(String.self, forKey: .composePromptRU) ?? "Напиши короткое предложение со словом \(english)."
+        acceptedAnswers = try container.decodeIfPresent([String].self, forKey: .acceptedAnswers) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -378,6 +598,138 @@ struct WordEntry: Codable, Hashable, Identifiable {
         try container.encode(synonyms, forKey: .synonyms)
         try container.encode(sentenceTiles, forKey: .sentenceTiles)
         try container.encode(clozeSentence, forKey: .clozeSentence)
+        try container.encode(hints, forKey: .hints)
+        try container.encode(collocations, forKey: .collocations)
+        try container.encode(extraExamplesEN, forKey: .extraExamplesEN)
+        try container.encode(extraExamplesRU, forKey: .extraExamplesRU)
+        try container.encode(composePromptEN, forKey: .composePromptEN)
+        try container.encode(composePromptRU, forKey: .composePromptRU)
+        try container.encode(acceptedAnswers, forKey: .acceptedAnswers)
+    }
+}
+
+struct PracticeSession: Codable, Equatable, Identifiable {
+    let id: UUID
+    var wordIDs: [WordEntry.ID]
+    var currentWordIndex: Int
+    var currentStepIndex: Int
+    var hearts: Int
+    var xp: Int
+    var results: [PracticeStageResult]
+    var steps: [PracticeStep]
+
+    init(
+        id: UUID = UUID(),
+        words: [WordEntry],
+        startWordID: WordEntry.ID?,
+        steps: [PracticeStep] = PracticeStep.allCases,
+        hearts: Int = 3
+    ) {
+        let uniqueWords = words.uniquedByID()
+        self.id = id
+        self.wordIDs = uniqueWords.map(\.id)
+        self.currentWordIndex = startWordID.flatMap { id in uniqueWords.firstIndex { $0.id == id } } ?? 0
+        self.currentStepIndex = 0
+        self.hearts = hearts
+        self.xp = 0
+        self.results = []
+        self.steps = steps
+    }
+
+    var currentWordID: WordEntry.ID? {
+        guard wordIDs.indices.contains(currentWordIndex) else { return nil }
+        return wordIDs[currentWordIndex]
+    }
+
+    var currentStep: PracticeStep {
+        guard !steps.isEmpty else { return .meaningChoice }
+        return steps[min(currentStepIndex, max(steps.count - 1, 0))]
+    }
+
+    var isOnLastStep: Bool {
+        currentStepIndex >= steps.count - 1
+    }
+
+    var progress: Double {
+        guard !wordIDs.isEmpty, !steps.isEmpty else { return 0 }
+        let completed = currentWordIndex * steps.count + currentStepIndex
+        return Double(completed) / Double(wordIDs.count * steps.count)
+    }
+
+    var correctCount: Int {
+        results.filter { $0.isCorrect && !$0.wasSkipped }.count
+    }
+
+    var wrongCount: Int {
+        results.filter { !$0.isCorrect && !$0.wasSkipped }.count
+    }
+
+    var scoredCount: Int {
+        results.filter { !$0.wasSkipped }.count
+    }
+
+    mutating func record(step: PracticeStep, wordID: WordEntry.ID, isCorrect: Bool, xp: Int, wasSkipped: Bool = false) {
+        results.append(PracticeStageResult(step: step, wordID: wordID, isCorrect: isCorrect, wasSkipped: wasSkipped, xp: xp))
+        self.xp += xp
+        if !isCorrect && !wasSkipped {
+            hearts = max(0, hearts - 1)
+        }
+    }
+
+    mutating func advanceStep() {
+        currentStepIndex = min(currentStepIndex + 1, max(steps.count - 1, 0))
+    }
+
+    mutating func advanceWord() {
+        currentWordIndex = min(currentWordIndex + 1, max(wordIDs.count - 1, 0))
+        currentStepIndex = 0
+    }
+}
+
+enum WordSortOption: String, CaseIterable, Identifiable {
+    case smart
+    case alphabetic
+    case level
+    case masteryLow
+    case masteryHigh
+    case topic
+    case dueFirst
+    case newest
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .smart: "sparkles"
+        case .alphabetic: "textformat.abc"
+        case .level: "flag.checkered"
+        case .masteryLow: "arrow.down.forward.circle"
+        case .masteryHigh: "arrow.up.forward.circle"
+        case .topic: "square.grid.2x2"
+        case .dueFirst: "clock.arrow.circlepath"
+        case .newest: "plus.circle"
+        }
+    }
+
+    func title(for language: AppLanguage) -> String {
+        switch self {
+        case .smart:
+            language.text(ru: "Умно", en: "Smart")
+        case .alphabetic:
+            language.text(ru: "A-Z", en: "A-Z")
+        case .level:
+            language.text(ru: "Уровень", en: "Level")
+        case .masteryLow:
+            language.text(ru: "Слабые", en: "Weak")
+        case .masteryHigh:
+            language.text(ru: "Освоено", en: "Mastered")
+        case .topic:
+            language.text(ru: "Тема", en: "Topic")
+        case .dueFirst:
+            language.text(ru: "Повторить", en: "Due")
+        case .newest:
+            language.text(ru: "Новые", en: "New")
+        }
     }
 }
 
@@ -670,7 +1022,7 @@ enum MemoryEngine {
         if isCorrect {
             memory.correctCount += 1
             memory.streak += 1
-            memory.mastery = min(100, memory.mastery + 16 + min(memory.streak, 4) * 3)
+            memory.mastery = min(100, memory.mastery + masteryGain(for: mode, streak: memory.streak))
             memory.dueAt = Calendar.current.date(byAdding: .day, value: intervalDays(for: memory), to: now)
             profile.markCompleted(word.id)
             if memory.mastery >= 45 {
@@ -738,6 +1090,39 @@ enum MemoryEngine {
         case 65..<82: 7
         case 82..<94: 14
         default: 30
+        }
+    }
+
+    private static func masteryGain(for mode: PracticeMode, streak: Int) -> Int {
+        let streakBonus = min(streak, 3)
+
+        switch mode {
+        case .wordReveal:
+            return 5 + streakBonus
+        case .listenChoice:
+            return 7 + streakBonus
+        case .translateChoice:
+            return 9 + streakBonus
+        case .synonymMatch:
+            return 10 + streakBonus
+        case .clozeChoice:
+            return 10 + streakBonus
+        case .sentenceBuilder:
+            return 11 + streakBonus
+        case .sentenceCompose:
+            return 12 + streakBonus
+        case .meaningChoice:
+            return 8 + streakBonus
+        case .ruToEnglishTiles:
+            return 12 + streakBonus
+        case .listenTiles:
+            return 11 + streakBonus
+        case .clozeWord:
+            return 10 + streakBonus
+        case .wordOrder:
+            return 12 + streakBonus
+        case .speechRepeat:
+            return 10 + streakBonus
         }
     }
 
@@ -890,6 +1275,16 @@ enum WordBank {
             .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 && $0.hasReadableRussian }
             .map(\.russian)
         return choices(correct: word.russian, distractors: pool, seed: seed(for: word.id))
+    }
+
+    static func englishChoices(for word: WordEntry) -> [String] {
+        let pool = all
+            .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 && $0.partOfSpeech == word.partOfSpeech }
+            .map(\.english)
+        let fallback = all
+            .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 }
+            .map(\.english)
+        return choices(correct: word.english, distractors: pool.isEmpty ? fallback : pool, seed: seed(for: word.id) + 31)
     }
 
     static func synonymChoices(for word: WordEntry) -> [String] {
