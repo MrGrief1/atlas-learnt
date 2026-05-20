@@ -50,7 +50,9 @@ struct ContentView: View {
             return .default
         }
 
-        return decoded
+        var profile = decoded
+        profile.prepareForToday()
+        return profile
     }
 
     private func save(_ profile: AtlasProfile) {

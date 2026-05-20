@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var showsPractice = false
     @State private var showsWordBank = false
     @State private var showsStats = false
+    @State private var showsDailyProgress = false
     @State private var selectedInfoWord: WordEntry?
 
     private var dailyWords: [WordEntry] {
@@ -38,7 +39,7 @@ struct HomeView: View {
     }
 
     private var progressValue: Double {
-        Double(profile.completedTodayIDs.count) / Double(max(profile.dailyGoal, 1))
+        Double(profile.completedTodayCount) / Double(max(profile.dailyGoal, 1))
     }
 
     var body: some View {
@@ -62,7 +63,10 @@ struct HomeView: View {
             .padding(.top, 16)
             .padding(.bottom, 18)
         }
-        .onAppear(perform: alignSelectedWord)
+        .onAppear {
+            profile.prepareForToday()
+            alignSelectedWord()
+        }
         .onChange(of: dailyWordIDs) { _, _ in
             alignSelectedWord()
         }
@@ -77,7 +81,8 @@ struct HomeView: View {
         .fullScreenCover(isPresented: $showsPractice) {
             PracticeView(
                 profile: $profile,
-                words: dailyWords
+                words: dailyWords,
+                startWordID: currentWord.id
             )
         }
         .sheet(isPresented: $showsWordBank) {
@@ -85,6 +90,15 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showsStats) {
             StatsView(profile: profile)
+        }
+        .sheet(isPresented: $showsDailyProgress) {
+            DailyProgressView(profile: $profile) {
+                showsDailyProgress = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                    showsPractice = true
+                }
+            }
+            .presentationDetents([.medium, .large])
         }
         .sheet(item: $selectedInfoWord) { word in
             WordInfoView(word: word, language: profile.appLanguage)
@@ -130,31 +144,47 @@ struct HomeView: View {
 
             Spacer()
 
-            HStack(spacing: 10) {
-                Image(systemName: "bookmark")
-                    .font(.system(size: 17, weight: .semibold))
+            Button {
+                AtlasHaptics.tap()
+                showsDailyProgress = true
+            } label: {
+                HStack(spacing: 10) {
+                    Text("EN")
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.white.opacity(0.16)))
 
-                Text("\(profile.completedTodayIDs.count)/\(profile.dailyGoal)")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Text("\(profile.completedTodayCount)/\(profile.dailyGoal)")
+                                .font(.system(size: 16, weight: .black, design: .rounded))
+                            Text("\(profile.currentLevel.tag) \(profile.score0To160)")
+                                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                .opacity(0.72)
+                        }
 
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.62))
+                        GeometryReader { proxy in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.30))
 
-                        Capsule()
-                            .fill(.white)
-                            .frame(width: proxy.size.width * min(progressValue, 1))
+                                Capsule()
+                                    .fill(.white)
+                                    .frame(width: proxy.size.width * min(progressValue, 1))
+                            }
+                        }
+                        .frame(height: 6)
                     }
                 }
-                .frame(width: 96, height: 7)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 13)
+                .frame(width: 174, height: 48)
+                .background(Capsule().fill(AtlasColors.deepInk))
+                .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                .shadow(color: .black.opacity(0.22), radius: 14, y: 10)
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 15)
-            .frame(height: 44)
-            .background(Capsule().fill(AtlasColors.deepInk))
-            .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
-            .shadow(color: .black.opacity(0.22), radius: 14, y: 10)
+            .buttonStyle(.plain)
 
             Spacer()
 
@@ -251,8 +281,8 @@ struct HomeView: View {
                 selectedInfoWord = word
             }
 
-            homeIconButton(systemName: "square.and.arrow.up", size: 48) {
-                profile.markCompleted(word.id)
+            homeIconButton(systemName: "checkmark.seal", size: 48) {
+                _ = profile.recordPractice(word: word, mode: .translateChoice, isCorrect: true)
                 nextWord(triggerHaptic: false)
             }
 
@@ -447,68 +477,5 @@ struct WordInfoView: View {
             .padding(.horizontal, AtlasLayout.screenPadding)
             .padding(.vertical, 20)
         }
-    }
-}
-
-struct StatsView: View {
-    let profile: AtlasProfile
-
-    var body: some View {
-        ZStack {
-            AtlasColors.paper.ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 22) {
-                Text(profile.appLanguage.text(ru: "Статистика", en: "Stats"))
-                    .font(.system(size: 34, weight: .black, design: .serif))
-
-                HStack(spacing: 12) {
-                    statCard(
-                        icon: "flame.fill",
-                        title: profile.appLanguage.text(ru: "Серия", en: "Streak"),
-                        value: "\(profile.streak)"
-                    )
-                    statCard(
-                        icon: "bolt.fill",
-                        title: "XP",
-                        value: "\(profile.xp)"
-                    )
-                }
-
-                statCard(
-                    icon: "checkmark.seal.fill",
-                    title: profile.appLanguage.text(ru: "Сегодня выучено", en: "Completed today"),
-                    value: "\(profile.completedTodayIDs.count)/\(profile.dailyGoal)"
-                )
-
-                Spacer()
-            }
-            .padding(.horizontal, AtlasLayout.screenPadding)
-            .padding(.vertical, 20)
-        }
-    }
-
-    private func statCard(icon: String, title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(AtlasColors.green)
-
-            Text(value)
-                .font(.system(size: 33, weight: .black, design: .rounded))
-
-            Text(title)
-                .font(.system(size: 14, weight: .heavy, design: .rounded))
-                .foregroundStyle(.black.opacity(0.62))
-        }
-        .foregroundStyle(.black)
-        .padding(15)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(AtlasColors.line, lineWidth: 2)
-        )
-        .shadow(color: AtlasColors.line, radius: 0, y: 5)
     }
 }

@@ -32,51 +32,69 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
 }
 
 enum LearningLevel: String, CaseIterable, Codable, Identifiable, Comparable {
-    case beginner
-    case elementary
-    case intermediate
-    case upperIntermediate
-    case advanced
+    case a1
+    case a2
+    case b1
+    case b2
+    case c1
+    case c2
 
     var id: String { rawValue }
 
     var order: Int {
         switch self {
-        case .beginner: 0
-        case .elementary: 1
-        case .intermediate: 2
-        case .upperIntermediate: 3
-        case .advanced: 4
+        case .a1: 0
+        case .a2: 1
+        case .b1: 2
+        case .b2: 3
+        case .c1: 4
+        case .c2: 5
         }
     }
 
     var tag: String {
         switch self {
-        case .beginner: "A1"
-        case .elementary: "A2"
-        case .intermediate: "B1"
-        case .upperIntermediate: "B2"
-        case .advanced: "C1"
+        case .a1: "A1"
+        case .a2: "A2"
+        case .b1: "B1"
+        case .b2: "B2"
+        case .c1: "C1"
+        case .c2: "C2"
         }
     }
 
+    var scoreRange: ClosedRange<Int> {
+        switch self {
+        case .a1: 0...29
+        case .a2: 30...59
+        case .b1: 60...99
+        case .b2: 100...129
+        case .c1: 130...144
+        case .c2: 145...160
+        }
+    }
+
+    var scoreStart: Int { scoreRange.lowerBound }
+
     var englishTitle: String {
         switch self {
-        case .beginner: "Beginner"
-        case .elementary: "Elementary"
-        case .intermediate: "Intermediate"
-        case .upperIntermediate: "Upper Intermediate"
-        case .advanced: "Advanced"
+        case .a1: "Beginner"
+        case .a2: "Elementary"
+        case .b1: "Intermediate"
+        case .b2: "Upper Intermediate"
+        case .c1: "Advanced"
+        case .c2: "Proficient"
         }
     }
 
     var russianTitle: String {
         switch self {
-        case .beginner: "Начальный"
-        case .elementary: "Базовый"
-        case .intermediate: "Средний"
-        case .upperIntermediate: "Выше среднего"
-        case .advanced: "Продвинутый"
+        case .a1: "Начальный"
+        case .a2: "Базовый"
+        case .b1: "Средний"
+        case .b2: "Выше среднего"
+        case .c1: "Продвинутый"
+        case .c2: "Профессиональный"
         }
     }
 
@@ -84,26 +102,122 @@ enum LearningLevel: String, CaseIterable, Codable, Identifiable, Comparable {
         language.text(ru: russianTitle, en: englishTitle)
     }
 
+    var shortCanDoRU: String {
+        switch self {
+        case .a1: "Простые фразы, знакомство, базовые вопросы."
+        case .a2: "Рутинные темы, покупки, поездки, семья, работа."
+        case .b1: "Знакомые ситуации, рассказы, планы и мнения."
+        case .b2: "Сложные темы, аргументы, новости и работа."
+        case .c1: "Длинные тексты, нюансы, гибкая речь."
+        case .c2: "Почти всё на слух и в тексте, точная речь."
+        }
+    }
+
+    var next: LearningLevel {
+        LearningLevel.allCases[min(order + 1, LearningLevel.allCases.count - 1)]
+    }
+
     static func < (lhs: LearningLevel, rhs: LearningLevel) -> Bool {
         lhs.order < rhs.order
     }
 
+    static func from(score: Int) -> LearningLevel {
+        let clamped = max(0, min(score, 160))
+        return allCases.first { $0.scoreRange.contains(clamped) } ?? .c2
+    }
+
+    static func calibrated(from selected: LearningLevel, correctCount: Int, total: Int) -> (level: LearningLevel, score: Int) {
+        guard total > 0 else { return (selected, selected.scoreStart) }
+
+        let accuracy = Double(correctCount) / Double(total)
+        let base = selected.scoreStart + Int(Double(selected.scoreRange.count) * 0.45)
+        let shift = Int((accuracy - 0.5) * 58)
+        let score = max(0, min(160, base + shift))
+        return (from(score: score), score)
+    }
+
     static func calibrated(from selected: LearningLevel, knownCount: Int, total: Int) -> LearningLevel {
-        guard total > 0 else { return selected }
+        calibrated(from: selected, correctCount: knownCount, total: total).level
+    }
 
-        let ratio = Double(knownCount) / Double(total)
-        let shift: Int
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self).lowercased()
 
-        if ratio < 0.25 {
-            shift = -1
-        } else if ratio > 0.75 {
-            shift = 1
-        } else {
-            shift = 0
+        switch raw {
+        case "a1", "beginner":
+            self = .a1
+        case "a2", "elementary":
+            self = .a2
+        case "b1", "intermediate":
+            self = .b1
+        case "b2", "upperintermediate", "upper_intermediate", "upper-intermediate":
+            self = .b2
+        case "c1", "advanced":
+            self = .c1
+        case "c2", "proficient":
+            self = .c2
+        default:
+            self = .a2
         }
+    }
 
-        let index = max(0, min(Self.allCases.count - 1, selected.order + shift))
-        return Self.allCases[index]
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+enum PracticeMode: String, CaseIterable, Codable, Identifiable {
+    case translateChoice
+    case synonymMatch
+    case sentenceBuilder
+    case clozeChoice
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .translateChoice: "text.bubble"
+        case .synonymMatch: "link"
+        case .sentenceBuilder: "square.grid.3x1.below.line.grid.1x2"
+        case .clozeChoice: "text.cursor"
+        }
+    }
+
+    func title(for language: AppLanguage) -> String {
+        switch self {
+        case .translateChoice:
+            language.text(ru: "Перевод", en: "Translation")
+        case .synonymMatch:
+            language.text(ru: "Синоним", en: "Synonym")
+        case .sentenceBuilder:
+            language.text(ru: "Собери фразу", en: "Build sentence")
+        case .clozeChoice:
+            language.text(ru: "Пропуск", en: "Fill the blank")
+        }
+    }
+
+    func subtitle(for language: AppLanguage) -> String {
+        switch self {
+        case .translateChoice:
+            language.text(ru: "Выбери русский перевод", en: "Choose the Russian meaning")
+        case .synonymMatch:
+            language.text(ru: "Найди близкое английское слово", en: "Find the closest English word")
+        case .sentenceBuilder:
+            language.text(ru: "Расставь плитки по порядку", en: "Put the tiles in order")
+        case .clozeChoice:
+            language.text(ru: "Вставь слово в контекст", en: "Use the word in context")
+        }
+    }
+
+    var xpReward: Int {
+        switch self {
+        case .translateChoice: 10
+        case .synonymMatch: 12
+        case .sentenceBuilder: 15
+        case .clozeChoice: 14
+        }
     }
 }
 
@@ -159,6 +273,11 @@ struct WordEntry: Codable, Hashable, Identifiable {
     let exampleRU: String
     let level: LearningLevel
     let topic: String
+    let synonyms: [String]
+    let sentenceTiles: [String]
+    let clozeSentence: String
+
+    var cefrLevel: LearningLevel { level }
 
     func definition(for language: AppLanguage) -> String {
         language.text(ru: definitionRU, en: definitionEN)
@@ -167,33 +286,300 @@ struct WordEntry: Codable, Hashable, Identifiable {
     func example(for language: AppLanguage) -> String {
         language.text(ru: exampleRU, en: exampleEN)
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case english
+        case russian
+        case partOfSpeech
+        case ipa
+        case definitionEN
+        case definitionRU
+        case exampleEN
+        case exampleRU
+        case level
+        case cefrLevel
+        case topic
+        case synonyms
+        case sentenceTiles
+        case clozeSentence
+    }
+
+    init(
+        id: String,
+        english: String,
+        russian: String,
+        partOfSpeech: String,
+        ipa: String,
+        definitionEN: String,
+        definitionRU: String,
+        exampleEN: String,
+        exampleRU: String,
+        level: LearningLevel,
+        topic: String,
+        synonyms: [String],
+        sentenceTiles: [String],
+        clozeSentence: String
+    ) {
+        self.id = id
+        self.english = english
+        self.russian = russian
+        self.partOfSpeech = partOfSpeech
+        self.ipa = ipa
+        self.definitionEN = definitionEN
+        self.definitionRU = definitionRU
+        self.exampleEN = exampleEN
+        self.exampleRU = exampleRU
+        self.level = level
+        self.topic = topic
+        self.synonyms = synonyms
+        self.sentenceTiles = sentenceTiles
+        self.clozeSentence = clozeSentence
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        english = try container.decode(String.self, forKey: .english)
+        russian = try container.decode(String.self, forKey: .russian)
+        partOfSpeech = try container.decodeIfPresent(String.self, forKey: .partOfSpeech) ?? "word"
+        ipa = try container.decodeIfPresent(String.self, forKey: .ipa) ?? "/\(english)/"
+        definitionEN = try container.decodeIfPresent(String.self, forKey: .definitionEN) ?? "A useful English word for everyday communication."
+        definitionRU = try container.decodeIfPresent(String.self, forKey: .definitionRU) ?? "Полезное английское слово для общения."
+        exampleEN = try container.decodeIfPresent(String.self, forKey: .exampleEN) ?? "I can use \(english) today."
+        exampleRU = try container.decodeIfPresent(String.self, forKey: .exampleRU) ?? "Я могу использовать \(english) сегодня."
+        level = try container.decodeIfPresent(LearningLevel.self, forKey: .level)
+            ?? container.decodeIfPresent(LearningLevel.self, forKey: .cefrLevel)
+            ?? .a2
+        topic = try container.decodeIfPresent(String.self, forKey: .topic) ?? "Everyday"
+        synonyms = try container.decodeIfPresent([String].self, forKey: .synonyms) ?? []
+        sentenceTiles = try container.decodeIfPresent([String].self, forKey: .sentenceTiles) ?? exampleEN.split(separator: " ").map(String.init)
+        clozeSentence = try container.decodeIfPresent(String.self, forKey: .clozeSentence) ?? exampleEN.replacingOccurrences(of: english, with: "____")
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(english, forKey: .english)
+        try container.encode(russian, forKey: .russian)
+        try container.encode(partOfSpeech, forKey: .partOfSpeech)
+        try container.encode(ipa, forKey: .ipa)
+        try container.encode(definitionEN, forKey: .definitionEN)
+        try container.encode(definitionRU, forKey: .definitionRU)
+        try container.encode(exampleEN, forKey: .exampleEN)
+        try container.encode(exampleRU, forKey: .exampleRU)
+        try container.encode(level, forKey: .level)
+        try container.encode(topic, forKey: .topic)
+        try container.encode(synonyms, forKey: .synonyms)
+        try container.encode(sentenceTiles, forKey: .sentenceTiles)
+        try container.encode(clozeSentence, forKey: .clozeSentence)
+    }
+}
+
+struct WordMemory: Codable, Equatable {
+    var correctCount: Int
+    var wrongCount: Int
+    var streak: Int
+    var mastery: Int
+    var lastPracticedAt: Date?
+    var dueAt: Date?
+
+    static let fresh = WordMemory(
+        correctCount: 0,
+        wrongCount: 0,
+        streak: 0,
+        mastery: 0,
+        lastPracticedAt: nil,
+        dueAt: nil
+    )
+
+    var totalAttempts: Int { correctCount + wrongCount }
+
+    var accuracy: Double {
+        guard totalAttempts > 0 else { return 0 }
+        return Double(correctCount) / Double(totalAttempts)
+    }
+
+    func isDue(on date: Date = Date()) -> Bool {
+        guard let dueAt else { return totalAttempts > 0 && mastery < 60 }
+        return dueAt <= date
+    }
+}
+
+struct DailyProgress: Codable, Equatable, Identifiable {
+    var id: String { dateKey }
+    var dateKey: String
+    var completedWordIDs: [String]
+    var xp: Int
+    var correct: Int
+    var wrong: Int
+    var dueCountAtStart: Int
+
+    static func empty(for dateKey: String) -> DailyProgress {
+        DailyProgress(dateKey: dateKey, completedWordIDs: [], xp: 0, correct: 0, wrong: 0, dueCountAtStart: 0)
+    }
+
+    var total: Int { correct + wrong }
+
+    var accuracy: Double {
+        guard total > 0 else { return 0 }
+        return Double(correct) / Double(total)
+    }
+}
+
+struct PracticeRecord: Codable, Equatable, Identifiable {
+    let id: UUID
+    let date: Date
+    let wordID: String
+    let wordEnglish: String
+    let mode: PracticeMode
+    let isCorrect: Bool
+    let xp: Int
+    let level: LearningLevel
 }
 
 struct AtlasProfile: Codable, Equatable {
     var appLanguage: AppLanguage
-    var level: LearningLevel
+    var currentLevel: LearningLevel
+    var score0To160: Int
     var dailyGoal: Int
-    var voiceID: SpeechVoiceOption? = .american
+    var voiceID: SpeechVoiceOption?
     var selectedTopics: [String]
     var unknownWordIDs: [String]
     var savedWordIDs: [String]
     var favoriteWordIDs: [String]
     var completedTodayIDs: [String]
+    var wordProgress: [String: WordMemory]
+    var dailyProgress: [String: DailyProgress]
+    var practiceHistory: [PracticeRecord]
+    var lastStudyDateKey: String
     var streak: Int
     var xp: Int
 
+    var level: LearningLevel {
+        get { currentLevel }
+        set {
+            currentLevel = newValue
+            score0To160 = max(score0To160, newValue.scoreStart)
+        }
+    }
+
     static let `default` = AtlasProfile(
         appLanguage: .russian,
-        level: .elementary,
-        dailyGoal: 5,
-        selectedTopics: ["Everyday", "Work", "Emotions"],
+        currentLevel: .a2,
+        score0To160: LearningLevel.a2.scoreStart,
+        dailyGoal: 7,
+        selectedTopics: ["Everyday", "Work", "Study"],
         unknownWordIDs: [],
         savedWordIDs: [],
         favoriteWordIDs: [],
         completedTodayIDs: [],
+        wordProgress: [:],
+        dailyProgress: [:],
+        practiceHistory: [],
         streak: 0,
         xp: 0
     )
+
+    init(
+        appLanguage: AppLanguage,
+        currentLevel: LearningLevel,
+        score0To160: Int,
+        dailyGoal: Int,
+        voiceID: SpeechVoiceOption? = .american,
+        selectedTopics: [String],
+        unknownWordIDs: [String],
+        savedWordIDs: [String],
+        favoriteWordIDs: [String],
+        completedTodayIDs: [String],
+        wordProgress: [String: WordMemory],
+        dailyProgress: [String: DailyProgress],
+        practiceHistory: [PracticeRecord],
+        streak: Int,
+        xp: Int
+    ) {
+        self.appLanguage = appLanguage
+        self.currentLevel = currentLevel
+        self.score0To160 = max(0, min(score0To160, 160))
+        self.dailyGoal = dailyGoal
+        self.voiceID = voiceID
+        self.selectedTopics = selectedTopics
+        self.unknownWordIDs = unknownWordIDs
+        self.savedWordIDs = savedWordIDs
+        self.favoriteWordIDs = favoriteWordIDs
+        self.completedTodayIDs = completedTodayIDs
+        self.wordProgress = wordProgress
+        self.dailyProgress = dailyProgress
+        self.practiceHistory = practiceHistory
+        self.lastStudyDateKey = Self.todayKey()
+        self.streak = streak
+        self.xp = xp
+        prepareForToday()
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case appLanguage
+        case level
+        case currentLevel
+        case score0To160
+        case dailyGoal
+        case voiceID
+        case selectedTopics
+        case unknownWordIDs
+        case savedWordIDs
+        case favoriteWordIDs
+        case completedTodayIDs
+        case wordProgress
+        case dailyProgress
+        case practiceHistory
+        case lastStudyDateKey
+        case streak
+        case xp
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        appLanguage = try container.decodeIfPresent(AppLanguage.self, forKey: .appLanguage) ?? .russian
+        let migratedLevel = try container.decodeIfPresent(LearningLevel.self, forKey: .currentLevel)
+            ?? container.decodeIfPresent(LearningLevel.self, forKey: .level)
+            ?? .a2
+        currentLevel = migratedLevel
+        score0To160 = try container.decodeIfPresent(Int.self, forKey: .score0To160) ?? migratedLevel.scoreStart
+        dailyGoal = try container.decodeIfPresent(Int.self, forKey: .dailyGoal) ?? 7
+        voiceID = try container.decodeIfPresent(SpeechVoiceOption.self, forKey: .voiceID) ?? .american
+        selectedTopics = try container.decodeIfPresent([String].self, forKey: .selectedTopics) ?? ["Everyday", "Work", "Study"]
+        unknownWordIDs = try container.decodeIfPresent([String].self, forKey: .unknownWordIDs) ?? []
+        savedWordIDs = try container.decodeIfPresent([String].self, forKey: .savedWordIDs) ?? []
+        favoriteWordIDs = try container.decodeIfPresent([String].self, forKey: .favoriteWordIDs) ?? []
+        completedTodayIDs = try container.decodeIfPresent([String].self, forKey: .completedTodayIDs) ?? []
+        wordProgress = try container.decodeIfPresent([String: WordMemory].self, forKey: .wordProgress) ?? [:]
+        dailyProgress = try container.decodeIfPresent([String: DailyProgress].self, forKey: .dailyProgress) ?? [:]
+        practiceHistory = try container.decodeIfPresent([PracticeRecord].self, forKey: .practiceHistory) ?? []
+        lastStudyDateKey = try container.decodeIfPresent(String.self, forKey: .lastStudyDateKey) ?? Self.todayKey()
+        streak = try container.decodeIfPresent(Int.self, forKey: .streak) ?? 0
+        xp = try container.decodeIfPresent(Int.self, forKey: .xp) ?? 0
+        prepareForToday()
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(appLanguage, forKey: .appLanguage)
+        try container.encode(currentLevel, forKey: .currentLevel)
+        try container.encode(score0To160, forKey: .score0To160)
+        try container.encode(dailyGoal, forKey: .dailyGoal)
+        try container.encodeIfPresent(voiceID, forKey: .voiceID)
+        try container.encode(selectedTopics, forKey: .selectedTopics)
+        try container.encode(unknownWordIDs, forKey: .unknownWordIDs)
+        try container.encode(savedWordIDs, forKey: .savedWordIDs)
+        try container.encode(favoriteWordIDs, forKey: .favoriteWordIDs)
+        try container.encode(completedTodayIDs, forKey: .completedTodayIDs)
+        try container.encode(wordProgress, forKey: .wordProgress)
+        try container.encode(dailyProgress, forKey: .dailyProgress)
+        try container.encode(practiceHistory, forKey: .practiceHistory)
+        try container.encode(lastStudyDateKey, forKey: .lastStudyDateKey)
+        try container.encode(streak, forKey: .streak)
+        try container.encode(xp, forKey: .xp)
+    }
 
     var dailyWords: [WordEntry] {
         WordBank.dailyWords(for: self)
@@ -201,6 +587,40 @@ struct AtlasProfile: Codable, Equatable {
 
     var selectedSpeechVoice: SpeechVoiceOption {
         voiceID ?? .american
+    }
+
+    var completedTodayCount: Int {
+        dailyProgress[Self.todayKey()]?.completedWordIDs.count ?? completedTodayIDs.count
+    }
+
+    var dueWordsCount: Int {
+        WordBank.all.filter { wordProgress[$0.id]?.isDue() == true }.count
+    }
+
+    var weakWordIDs: [String] {
+        wordProgress
+            .filter { _, memory in memory.wrongCount > 0 || (memory.totalAttempts > 0 && memory.mastery < 45) }
+            .sorted { lhs, rhs in lhs.value.mastery < rhs.value.mastery }
+            .map(\.key)
+    }
+
+    var overallAccuracy: Double {
+        let correct = dailyProgress.values.map(\.correct).reduce(0, +)
+        let wrong = dailyProgress.values.map(\.wrong).reduce(0, +)
+        guard correct + wrong > 0 else { return 0 }
+        return Double(correct) / Double(correct + wrong)
+    }
+
+    mutating func prepareForToday() {
+        let today = Self.todayKey()
+        if lastStudyDateKey != today {
+            completedTodayIDs = []
+            lastStudyDateKey = today
+        }
+
+        if dailyProgress[today] == nil {
+            dailyProgress[today] = .empty(for: today)
+        }
     }
 
     mutating func toggleSaved(_ id: String) {
@@ -216,7 +636,110 @@ struct AtlasProfile: Codable, Equatable {
     }
 
     mutating func markCompleted(_ id: String) {
+        prepareForToday()
         completedTodayIDs.appendUnique(id)
+        dailyProgress[Self.todayKey(), default: .empty(for: Self.todayKey())].completedWordIDs.appendUnique(id)
+    }
+
+    mutating func recordPractice(word: WordEntry, mode: PracticeMode, isCorrect: Bool) -> Int {
+        MemoryEngine.record(word: word, mode: mode, isCorrect: isCorrect, profile: &self)
+    }
+
+    static func todayKey(date: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+}
+
+enum MemoryEngine {
+    static func record(word: WordEntry, mode: PracticeMode, isCorrect: Bool, profile: inout AtlasProfile) -> Int {
+        profile.prepareForToday()
+
+        var memory = profile.wordProgress[word.id] ?? .fresh
+        let now = Date()
+        let xp = isCorrect ? mode.xpReward : 0
+
+        if isCorrect {
+            memory.correctCount += 1
+            memory.streak += 1
+            memory.mastery = min(100, memory.mastery + 16 + min(memory.streak, 4) * 3)
+            memory.dueAt = Calendar.current.date(byAdding: .day, value: intervalDays(for: memory), to: now)
+            profile.markCompleted(word.id)
+            if memory.mastery >= 45 {
+                profile.unknownWordIDs.removeAll { $0 == word.id }
+            }
+            profile.score0To160 = min(160, profile.score0To160 + scoreDelta(for: word, current: profile.currentLevel))
+        } else {
+            memory.wrongCount += 1
+            memory.streak = 0
+            memory.mastery = max(0, memory.mastery - 18)
+            memory.dueAt = Calendar.current.date(byAdding: .hour, value: 18, to: now)
+            profile.addUnknown(word.id)
+            profile.score0To160 = max(0, profile.score0To160 - 1)
+        }
+
+        memory.lastPracticedAt = now
+        profile.wordProgress[word.id] = memory
+        profile.currentLevel = LearningLevel.from(score: profile.score0To160)
+        profile.xp += xp
+
+        let today = AtlasProfile.todayKey(date: now)
+        var daily = profile.dailyProgress[today] ?? .empty(for: today)
+        daily.xp += xp
+        daily.dueCountAtStart = max(daily.dueCountAtStart, profile.dueWordsCount)
+        if isCorrect {
+            daily.correct += 1
+            daily.completedWordIDs.appendUnique(word.id)
+        } else {
+            daily.wrong += 1
+        }
+        profile.dailyProgress[today] = daily
+
+        profile.practiceHistory.insert(
+            PracticeRecord(
+                id: UUID(),
+                date: now,
+                wordID: word.id,
+                wordEnglish: word.english,
+                mode: mode,
+                isCorrect: isCorrect,
+                xp: xp,
+                level: word.level
+            ),
+            at: 0
+        )
+
+        if profile.practiceHistory.count > 500 {
+            profile.practiceHistory = Array(profile.practiceHistory.prefix(500))
+        }
+
+        if isCorrect && profile.streak == 0 {
+            profile.streak = 1
+        } else if isCorrect && daily.correct == 1 {
+            profile.streak += 1
+        }
+
+        return xp
+    }
+
+    private static func intervalDays(for memory: WordMemory) -> Int {
+        switch memory.mastery {
+        case 0..<25: 1
+        case 25..<45: 2
+        case 45..<65: 4
+        case 65..<82: 7
+        case 82..<94: 14
+        default: 30
+        }
+    }
+
+    private static func scoreDelta(for word: WordEntry, current: LearningLevel) -> Int {
+        if word.level.order > current.order { return 3 }
+        if word.level.order == current.order { return 2 }
+        return 1
     }
 }
 
@@ -236,75 +759,17 @@ extension Array where Element: Equatable {
 }
 
 enum WordBank {
-    static let topics = ["Everyday", "Work", "Study", "Emotions", "Travel", "Business"]
+    static let topics = ["Everyday", "Work", "Study", "Emotions", "Travel", "Business", "Health", "Tech", "Culture", "Nature"]
 
-    static let all: [WordEntry] = [
-        w("focus", "focus", "фокус", "noun", "/FOH-kus/", "Careful attention to one thing.", "Внимание, направленное на одну задачу.", "Deep work needs focus.", "Глубокая работа требует фокуса.", .beginner, "Everyday"),
-        w("goal", "goal", "цель", "noun", "/gohl/", "Something you want to achieve.", "То, чего ты хочешь достичь.", "My goal is to read daily.", "Моя цель - читать каждый день.", .beginner, "Everyday"),
-        w("habit", "habit", "привычка", "noun", "/HAB-it/", "A regular action you repeat.", "Действие, которое ты регулярно повторяешь.", "Practice became a habit.", "Практика стала привычкой.", .beginner, "Everyday"),
-        w("effort", "effort", "усилие", "noun", "/EF-ert/", "Energy used to do something.", "Энергия, потраченная на действие.", "Small effort every day matters.", "Маленькое усилие каждый день важно.", .beginner, "Study"),
-        w("improve", "improve", "улучшать", "verb", "/im-PROOV/", "To become better.", "Становиться лучше.", "I want to improve my English.", "Я хочу улучшить английский.", .beginner, "Study"),
-        w("remember", "remember", "помнить", "verb", "/ri-MEM-ber/", "To keep something in your mind.", "Сохранять что-то в памяти.", "I remember this word.", "Я помню это слово.", .beginner, "Study"),
-        w("practice", "practice", "тренироваться", "verb", "/PRAK-tis/", "To repeat a skill to get better.", "Повторять навык, чтобы стать лучше.", "Practice the words aloud.", "Тренируй слова вслух.", .beginner, "Study"),
-        w("choice", "choice", "выбор", "noun", "/choys/", "An option you can select.", "Вариант, который можно выбрать.", "You made a smart choice.", "Ты сделал умный выбор.", .beginner, "Everyday"),
-        w("mistake", "mistake", "ошибка", "noun", "/mi-STAYK/", "Something done incorrectly.", "Что-то сделанное неправильно.", "A mistake can teach you.", "Ошибка может тебя научить.", .beginner, "Study"),
-        w("useful", "useful", "полезный", "adjective", "/YOOS-ful/", "Helpful or practical.", "Полезный или практичный.", "This phrase is useful.", "Эта фраза полезна.", .beginner, "Everyday"),
-        w("honest", "honest", "честный", "adjective", "/ON-ist/", "Telling the truth.", "Говорящий правду.", "Give me an honest answer.", "Дай мне честный ответ.", .elementary, "Emotions"),
-        w("curious", "curious", "любознательный", "adjective", "/KYUR-ee-us/", "Wanting to know more.", "Желающий узнать больше.", "Curious people ask questions.", "Любознательные люди задают вопросы.", .elementary, "Study"),
-        w("patient", "patient", "терпеливый", "adjective", "/PAY-shent/", "Able to wait calmly.", "Способный спокойно ждать.", "Be patient with yourself.", "Будь терпелив к себе.", .elementary, "Emotions"),
-        w("borrow", "borrow", "одалживать", "verb", "/BOR-oh/", "To take something and return it later.", "Взять что-то с возвратом.", "Can I borrow your book?", "Можно одолжить твою книгу?", .elementary, "Everyday"),
-        w("advice", "advice", "совет", "noun", "/ad-VYS/", "A suggestion about what to do.", "Предложение о том, как поступить.", "Her advice helped me.", "Ее совет мне помог.", .elementary, "Work"),
-        w("arrange", "arrange", "организовать", "verb", "/uh-RAYNJ/", "To plan or put in order.", "Запланировать или привести в порядок.", "Let's arrange a meeting.", "Давай организуем встречу.", .elementary, "Work"),
-        w("avoid", "avoid", "избегать", "verb", "/uh-VOYD/", "To stay away from something.", "Держаться подальше от чего-то.", "Avoid repeating the same mistake.", "Избегай повторения той же ошибки.", .elementary, "Everyday"),
-        w("compare", "compare", "сравнивать", "verb", "/kum-PAIR/", "To look for similarities and differences.", "Искать сходства и различия.", "Compare the two answers.", "Сравни два ответа.", .elementary, "Study"),
-        w("support", "support", "поддержка", "noun", "/suh-PORT/", "Help given to someone.", "Помощь, оказанная кому-то.", "Your support means a lot.", "Твоя поддержка очень важна.", .elementary, "Emotions"),
-        w("confident", "confident", "уверенный", "adjective", "/KON-fi-dent/", "Feeling sure about your ability.", "Уверенный в своих силах.", "She sounds confident.", "Она звучит уверенно.", .elementary, "Work"),
-        w("concise", "concise", "краткий", "adjective", "/kun-SYS/", "Using few words clearly.", "Ясный и немногословный.", "Write a concise answer.", "Напиши краткий ответ.", .intermediate, "Work"),
-        w("reluctant", "reluctant", "неохотный", "adjective", "/ri-LUK-tent/", "Not willing to do something.", "Не желающий что-то делать.", "He was reluctant to speak.", "Он неохотно говорил.", .intermediate, "Emotions"),
-        w("resilient", "resilient", "стойкий", "adjective", "/ri-ZIL-yent/", "Able to recover after difficulty.", "Способный восстановиться после трудностей.", "A resilient learner keeps going.", "Стойкий ученик продолжает идти.", .intermediate, "Study"),
-        w("abundant", "abundant", "обильный", "adjective", "/uh-BUN-dent/", "More than enough.", "Более чем достаточный.", "The city has abundant options.", "В городе обильный выбор.", .intermediate, "Travel"),
-        w("emerge", "emerge", "появляться", "verb", "/i-MERJ/", "To appear or become known.", "Появляться или становиться известным.", "A pattern began to emerge.", "Начала появляться закономерность.", .intermediate, "Study"),
-        w("imply", "imply", "подразумевать", "verb", "/im-PLY/", "To suggest without saying directly.", "Намекать, не говоря прямо.", "What does this sentence imply?", "Что подразумевает это предложение?", .intermediate, "Study"),
-        w("maintain", "maintain", "поддерживать", "verb", "/mayn-TAYN/", "To keep something in good condition.", "Сохранять что-то в хорошем состоянии.", "Maintain your learning streak.", "Поддерживай серию обучения.", .intermediate, "Everyday"),
-        w("notice", "notice", "замечать", "verb", "/NOH-tis/", "To become aware of something.", "Осознать или увидеть что-то.", "Notice how the word is used.", "Заметь, как используется слово.", .intermediate, "Study"),
-        w("approach", "approach", "подход", "noun", "/uh-PROHCH/", "A way of dealing with something.", "Способ решения или отношения к чему-то.", "Try a new approach.", "Попробуй новый подход.", .intermediate, "Work"),
-        w("reliable", "reliable", "надежный", "adjective", "/ri-LY-uh-bul/", "Able to be trusted.", "Такой, которому можно доверять.", "This source is reliable.", "Этот источник надежный.", .intermediate, "Work"),
-        w("vivid", "vivid", "яркий", "adjective", "/VIV-id/", "Clear, strong, and detailed.", "Ясный, сильный и детальный.", "She gave a vivid example.", "Она привела яркий пример.", .intermediate, "Study"),
-        w("pursue", "pursue", "добиваться", "verb", "/per-SOO/", "To try to achieve something.", "Стараться достичь чего-то.", "Pursue the goal patiently.", "Добивайся цели терпеливо.", .intermediate, "Work"),
-        w("subtle", "subtle", "тонкий", "adjective", "/SUT-ul/", "Not obvious, delicate.", "Неочевидный, деликатный.", "There is a subtle difference.", "Есть тонкое различие.", .intermediate, "Study"),
-        w("expand", "expand", "расширять", "verb", "/ik-SPAND/", "To make larger or wider.", "Делать больше или шире.", "Expand your vocabulary.", "Расширяй словарный запас.", .intermediate, "Study"),
-        w("reticence", "reticence", "сдержанность", "noun", "/RET-i-sens/", "Being quiet and not sharing thoughts easily.", "Сдержанность, нежелание легко делиться мыслями.", "His reticence made the room feel tense.", "Его сдержанность создала напряжение.", .upperIntermediate, "Emotions"),
-        w("meticulous", "meticulous", "дотошный", "adjective", "/muh-TIK-yuh-lus/", "Very careful and precise.", "Очень внимательный и точный.", "She keeps meticulous notes.", "Она ведет дотошные заметки.", .upperIntermediate, "Work"),
-        w("coherent", "coherent", "связный", "adjective", "/koh-HEER-ent/", "Logical and easy to understand.", "Логичный и понятный.", "Make your argument coherent.", "Сделай аргумент связным.", .upperIntermediate, "Study"),
-        w("alleviate", "alleviate", "облегчать", "verb", "/uh-LEE-vee-ayt/", "To make pain or a problem less severe.", "Смягчать боль или проблему.", "A short break can alleviate stress.", "Короткий перерыв может облегчить стресс.", .upperIntermediate, "Emotions"),
-        w("inevitable", "inevitable", "неизбежный", "adjective", "/in-EV-i-tuh-bul/", "Impossible to avoid.", "Такой, которого невозможно избежать.", "Some mistakes are inevitable.", "Некоторые ошибки неизбежны.", .upperIntermediate, "Everyday"),
-        w("profound", "profound", "глубокий", "adjective", "/proh-FOWND/", "Very great or meaningful.", "Очень значительный или глубокий.", "The book had a profound effect.", "Книга оказала глубокое влияние.", .upperIntermediate, "Study"),
-        w("ambiguity", "ambiguity", "двусмысленность", "noun", "/am-bi-GYOO-i-tee/", "The quality of having more than one meaning.", "Наличие более чем одного значения.", "The ambiguity confused everyone.", "Двусмысленность всех запутала.", .upperIntermediate, "Work"),
-        w("scrutiny", "scrutiny", "пристальное изучение", "noun", "/SKROO-tin-ee/", "Careful and detailed examination.", "Тщательная и детальная проверка.", "The plan is under scrutiny.", "План находится под пристальным изучением.", .upperIntermediate, "Business"),
-        w("mundane", "mundane", "обыденный", "adjective", "/mun-DAYN/", "Ordinary and not exciting.", "Обычный и неинтересный.", "Even mundane tasks can teach discipline.", "Даже обыденные задачи учат дисциплине.", .upperIntermediate, "Everyday"),
-        w("articulate", "articulate", "ясно выражать", "verb", "/ar-TIK-yuh-layt/", "To express ideas clearly.", "Ясно выражать идеи.", "Articulate your opinion calmly.", "Ясно вырази свое мнение спокойно.", .upperIntermediate, "Work"),
-        w("endeavor", "endeavor", "стремление", "noun", "/en-DEV-er/", "A serious attempt to do something.", "Серьезная попытка что-то сделать.", "Learning is a lifelong endeavor.", "Обучение - стремление на всю жизнь.", .upperIntermediate, "Study"),
-        w("nuance", "nuance", "нюанс", "noun", "/NOO-ahns/", "A small but important difference.", "Маленькое, но важное различие.", "This word has a useful nuance.", "У этого слова есть полезный нюанс.", .upperIntermediate, "Study"),
-        w("serendipity", "serendipity", "счастливая случайность", "noun", "/ser-en-DIP-i-tee/", "Finding something good by chance.", "Случайное открытие чего-то хорошего.", "Their meeting was pure serendipity.", "Их встреча была счастливой случайностью.", .advanced, "Everyday"),
-        w("ubiquitous", "ubiquitous", "повсеместный", "adjective", "/yoo-BIK-wi-tus/", "Present everywhere.", "Присутствующий повсюду.", "Smartphones are ubiquitous.", "Смартфоны повсеместны.", .advanced, "Business"),
-        w("ephemeral", "ephemeral", "мимолетный", "adjective", "/i-FEM-er-ul/", "Lasting for a very short time.", "Длящийся очень короткое время.", "The mood was ephemeral.", "Настроение было мимолетным.", .advanced, "Emotions"),
-        w("benevolent", "benevolent", "доброжелательный", "adjective", "/buh-NEV-uh-lent/", "Kind and willing to help.", "Добрый и готовый помочь.", "A benevolent mentor guided them.", "Доброжелательный наставник их вел.", .advanced, "Work"),
-        w("exacerbate", "exacerbate", "усугублять", "verb", "/ig-ZAS-er-bayt/", "To make a problem worse.", "Делать проблему хуже.", "Stress can exacerbate confusion.", "Стресс может усугубить путаницу.", .advanced, "Emotions"),
-        w("juxtapose", "juxtapose", "сопоставлять", "verb", "/JUK-stuh-pohz/", "To place things side by side for contrast.", "Размещать рядом для сравнения.", "Juxtapose the two examples.", "Сопоставь два примера.", .advanced, "Study"),
-        w("elicit", "elicit", "вызывать", "verb", "/i-LIS-it/", "To draw out a response.", "Вызывать реакцию или ответ.", "The question elicited a smile.", "Вопрос вызвал улыбку.", .advanced, "Emotions"),
-        w("perspicacious", "perspicacious", "проницательный", "adjective", "/per-spi-KAY-shus/", "Able to understand things quickly and clearly.", "Способный быстро и ясно понимать.", "Her analysis was perspicacious.", "Ее анализ был проницательным.", .advanced, "Business"),
-        w("ostensible", "ostensible", "мнимый", "adjective", "/ah-STEN-suh-bul/", "Appearing true but not necessarily real.", "Кажущийся истинным, но не обязательно реальный.", "The ostensible reason was budget.", "Мнимой причиной был бюджет.", .advanced, "Business"),
-        w("clandestine", "clandestine", "тайный", "adjective", "/klan-DES-tin/", "Done secretly.", "Сделанный тайно.", "They held a clandestine meeting.", "Они провели тайную встречу.", .advanced, "Business"),
-        w("paradigm", "paradigm", "парадигма", "noun", "/PAIR-uh-dym/", "A model or pattern of thinking.", "Модель или образец мышления.", "The discovery changed the paradigm.", "Открытие изменило парадигму.", .advanced, "Study"),
-        w("ambivalent", "ambivalent", "двойственный", "adjective", "/am-BIV-uh-lent/", "Having mixed feelings.", "Испытывающий смешанные чувства.", "I feel ambivalent about the offer.", "У меня двойственное чувство насчет предложения.", .advanced, "Emotions"),
-        w("quintessential", "quintessential", "типичный", "adjective", "/kwin-tuh-SEN-shul/", "The most perfect example of something.", "Самый характерный пример чего-то.", "It was a quintessential city cafe.", "Это было типичное городское кафе.", .advanced, "Travel")
-    ]
+    static let all: [WordEntry] = {
+        if let loaded = loadBundledWords(), !loaded.isEmpty {
+            return loaded
+        }
 
-    static let assessmentWords: [WordEntry] = [
-        all[0], all[12], all[20], all[34], all[45], all[52]
-    ]
+        return fallbackWords()
+    }()
 
-    static func entry(id: String) -> WordEntry? {
+    nonisolated static func entry(id: String) -> WordEntry? {
         all.first { $0.id == id }
     }
 
@@ -316,56 +781,137 @@ enum WordBank {
         case "Emotions": language.text(ru: "Эмоции", en: "Emotions")
         case "Travel": language.text(ru: "Путешествия", en: "Travel")
         case "Business": language.text(ru: "Бизнес", en: "Business")
+        case "Health": language.text(ru: "Здоровье", en: "Health")
+        case "Tech": language.text(ru: "Технологии", en: "Tech")
+        case "Culture": language.text(ru: "Культура", en: "Culture")
+        case "Nature": language.text(ru: "Природа", en: "Nature")
         default: topic
         }
     }
 
     static func dailyWords(for profile: AtlasProfile) -> [WordEntry] {
-        let unknown = profile.unknownWordIDs.compactMap { id in
-            all.first { $0.id == id }
-        }
         let selectedTopics = Set(profile.selectedTopics)
-        let levelCeiling = min(LearningLevel.advanced.order, profile.level.order + 1)
+        let now = Date()
 
-        var candidates = all.filter { word in
-            word.level.order <= levelCeiling && (selectedTopics.isEmpty || selectedTopics.contains(word.topic))
+        let due = all.filter { word in
+            profile.wordProgress[word.id]?.isDue(on: now) == true
         }
 
-        if candidates.count < profile.dailyGoal {
-            candidates = all.filter { $0.level.order <= levelCeiling }
+        let unknown = profile.unknownWordIDs.compactMap(entry)
+        let currentLevel = all.filter { word in
+            word.level.order <= profile.currentLevel.order &&
+                (selectedTopics.isEmpty || selectedTopics.contains(word.topic))
         }
+        let stretch = all.filter { word in
+            word.level == profile.currentLevel.next &&
+                (selectedTopics.isEmpty || selectedTopics.contains(word.topic))
+        }
+        let saved = profile.savedWordIDs.compactMap(entry)
 
         let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 1
-        let rotatedCandidates = rotated(candidates, seed: day + profile.level.order * 7)
+        let streams = [
+            due.sorted { left, right in
+                (profile.wordProgress[left.id]?.mastery ?? 0) < (profile.wordProgress[right.id]?.mastery ?? 0)
+            },
+            unknown,
+            rotated(currentLevel, seed: day + profile.score0To160),
+            rotated(stretch, seed: day + 91),
+            saved
+        ]
 
         var result: [WordEntry] = []
+        for stream in streams {
+            for word in stream {
+                guard !result.contains(where: { $0.id == word.id }) else { continue }
+                result.append(word)
+                if result.count == profile.dailyGoal { return result }
+            }
+        }
 
-        for word in unknown + rotatedCandidates {
+        for word in rotated(all, seed: day) {
             guard !result.contains(where: { $0.id == word.id }) else { continue }
             result.append(word)
-
-            if result.count == profile.dailyGoal {
-                break
-            }
+            if result.count == profile.dailyGoal { break }
         }
 
         return result
     }
 
+    static func assessmentWords(startingAt level: LearningLevel) -> [WordEntry] {
+        let desiredLevels = LearningLevel.allCases
+        let primary = all.filter { abs($0.level.order - level.order) <= 1 }
+        let broader = desiredLevels.flatMap { level in all.filter { $0.level == level }.prefix(6) }
+        return Array((primary + broader).uniquedByID().prefix(30))
+    }
+
+    static var assessmentWords: [WordEntry] {
+        assessmentWords(startingAt: .a2)
+    }
+
     static func translationChoices(for word: WordEntry) -> [String] {
-        let sameLevel = all
+        let pool = all
+            .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 }
+            .map(\.russian)
+        return choices(correct: word.russian, distractors: pool, seed: seed(for: word.id))
+    }
+
+    static func synonymChoices(for word: WordEntry) -> [String] {
+        let correct = word.synonyms.first ?? "no exact synonym"
+        let pool = all
+            .filter { $0.id != word.id && $0.partOfSpeech == word.partOfSpeech }
+            .map(\.english)
+        return choices(correct: correct, distractors: pool, seed: seed(for: word.english) + 47)
+    }
+
+    static func clozeChoices(for word: WordEntry) -> [String] {
+        let pool = all
             .filter { $0.id != word.id && $0.level == word.level }
-            .map(\.russian)
+            .map(\.english)
+        return choices(correct: word.english, distractors: pool, seed: seed(for: word.id) + 89)
+    }
 
-        let fallback = all
-            .filter { $0.id != word.id }
-            .map(\.russian)
+    static func sentenceTiles(for word: WordEntry) -> [String] {
+        let tiles = word.sentenceTiles.isEmpty ? word.exampleEN.split(separator: " ").map(String.init) : word.sentenceTiles
+        return rotated(tiles, seed: seed(for: word.id) + 19)
+    }
 
-        let pool = Array(Set(sameLevel.count >= 3 ? sameLevel : fallback)).sorted()
-        var choices = Array(rotated(pool, seed: seed(for: word.id)).prefix(3))
-        let insertIndex = choices.isEmpty ? 0 : seed(for: word.english) % (choices.count + 1)
-        choices.insert(word.russian, at: insertIndex)
-        return Array(choices.prefix(4))
+    static func sentenceAnswer(for word: WordEntry) -> String {
+        (word.sentenceTiles.isEmpty ? word.exampleEN.split(separator: " ").map(String.init) : word.sentenceTiles)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .punctuationCharacters)
+    }
+
+    private static func choices(correct: String, distractors: [String], seed: Int) -> [String] {
+        let cleanPool = Array(Set(distractors.filter { !$0.isEmpty && $0 != correct })).sorted()
+        var result = Array(rotated(cleanPool, seed: seed).prefix(3))
+        let insertIndex = result.isEmpty ? 0 : abs(seed) % (result.count + 1)
+        result.insert(correct, at: insertIndex)
+        return Array(result.prefix(4))
+    }
+
+    private static func loadBundledWords() -> [WordEntry]? {
+        guard let url = Bundle.main.url(forResource: "WordBank", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([WordEntry].self, from: data)
+        else {
+            return nil
+        }
+
+        return decoded
+    }
+
+    private static func fallbackWords() -> [WordEntry] {
+        [
+            w("focus", "focus", "фокус", "noun", .a1, "Study", ["attention"]),
+            w("goal", "goal", "цель", "noun", .a1, "Everyday", ["aim"]),
+            w("habit", "habit", "привычка", "noun", .a1, "Everyday", ["routine"]),
+            w("effort", "effort", "усилие", "noun", .a2, "Study", ["work"]),
+            w("improve", "improve", "улучшать", "verb", .a2, "Study", ["upgrade"]),
+            w("confident", "confident", "уверенный", "adjective", .b1, "Emotions", ["sure"]),
+            w("concise", "concise", "краткий", "adjective", .b2, "Work", ["brief"]),
+            w("coherent", "coherent", "связный", "adjective", .c1, "Study", ["logical"]),
+            w("ubiquitous", "ubiquitous", "повсеместный", "adjective", .c2, "Business", ["everywhere"])
+        ]
     }
 
     private static func w(
@@ -373,38 +919,51 @@ enum WordBank {
         _ english: String,
         _ russian: String,
         _ partOfSpeech: String,
-        _ ipa: String,
-        _ definitionEN: String,
-        _ definitionRU: String,
-        _ exampleEN: String,
-        _ exampleRU: String,
         _ level: LearningLevel,
-        _ topic: String
+        _ topic: String,
+        _ synonyms: [String]
     ) -> WordEntry {
         WordEntry(
             id: id,
             english: english,
             russian: russian,
             partOfSpeech: partOfSpeech,
-            ipa: ipa,
-            definitionEN: definitionEN,
-            definitionRU: definitionRU,
-            exampleEN: exampleEN,
-            exampleRU: exampleRU,
+            ipa: "/\(english)/",
+            definitionEN: "A useful \(partOfSpeech) for \(topic.lowercased()) communication.",
+            definitionRU: "Полезное слово для темы \(topicTitle(topic, for: .russian).lowercased()).",
+            exampleEN: "I can use \(english) in a clear sentence.",
+            exampleRU: "Я могу использовать \(english) в понятном предложении.",
             level: level,
-            topic: topic
+            topic: topic,
+            synonyms: synonyms,
+            sentenceTiles: ["I", "can", "use", english, "today"],
+            clozeSentence: "I can use ____ today."
         )
     }
 
-    private static func rotated<T>(_ items: [T], seed: Int) -> [T] {
+    static func rotated<T>(_ items: [T], seed: Int) -> [T] {
         guard !items.isEmpty else { return [] }
         let offset = abs(seed) % items.count
         return Array(items[offset..<items.count]) + Array(items[0..<offset])
     }
 
-    private static func seed(for value: String) -> Int {
+    static func seed(for value: String) -> Int {
         value.unicodeScalars.reduce(0) { partialResult, scalar in
             (partialResult + Int(scalar.value)) % 10_000
         }
+    }
+}
+
+extension Array where Element == WordEntry {
+    func uniquedByID() -> [WordEntry] {
+        var seen = Set<String>()
+        var result: [WordEntry] = []
+
+        for word in self where !seen.contains(word.id) {
+            seen.insert(word.id)
+            result.append(word)
+        }
+
+        return result
     }
 }

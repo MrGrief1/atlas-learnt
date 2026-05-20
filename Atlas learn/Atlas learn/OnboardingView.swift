@@ -10,19 +10,32 @@ struct OnboardingView: View {
 
     @State private var page = 0
     @State private var appLanguage: AppLanguage = .russian
-    @State private var selectedLevel: LearningLevel = .elementary
-    @State private var dailyGoal = 5
-    @State private var selectedTopics = Set(["Everyday", "Work", "Emotions"])
+    @State private var selectedLevel: LearningLevel = .a2
+    @State private var dailyGoal = 7
+    @State private var selectedTopics = Set(["Everyday", "Work", "Study"])
     @State private var quizIndex = 0
-    @State private var knownCount = 0
+    @State private var correctAnswers = 0
+    @State private var adaptiveScore = LearningLevel.a2.scoreStart
     @State private var unknownWordIDs = Set<String>()
+    @State private var askedWordIDs = Set<String>()
 
-    private let quizWords = WordBank.assessmentWords
+    private let quizLimit = 28
+
+    private var currentAssessmentLevel: LearningLevel {
+        LearningLevel.from(score: adaptiveScore)
+    }
+
+    private var currentQuizWord: WordEntry {
+        let levelWords = WordBank.all.filter { $0.level == currentAssessmentLevel && !askedWordIDs.contains($0.id) }
+        let fallback = WordBank.all.filter { $0.level == currentAssessmentLevel }
+        return WordBank.rotated(levelWords.isEmpty ? fallback : levelWords, seed: adaptiveScore + quizIndex * 13).first
+            ?? WordBank.assessmentWords.first
+            ?? WordBank.all[0]
+    }
 
     var body: some View {
         ZStack {
-            AtlasColors.paper
-                .ignoresSafeArea()
+            AtlasColors.paper.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 progressHeader
@@ -56,6 +69,7 @@ struct OnboardingView: View {
         .atlasMotion(dailyGoal)
         .atlasMotion(selectedTopics)
         .atlasMotion(quizIndex)
+        .atlasMotion(adaptiveScore)
     }
 
     private var progressHeader: some View {
@@ -121,8 +135,8 @@ struct OnboardingView: View {
             onboardingTitle(
                 appLanguage.text(ru: "Какой у тебя уровень?", en: "What is your level?"),
                 subtitle: appLanguage.text(
-                    ru: "Это стартовая оценка. Дальше короткий тест уточнит слова, которые ты не знаешь.",
-                    en: "This is the starting point. A short test will refine the words you do not know."
+                    ru: "Это стартовая оценка. Дальше адаптивный тест уточнит CEFR и Atlas Score.",
+                    en: "This is the starting point. An adaptive test will refine CEFR and Atlas Score."
                 )
             )
 
@@ -150,8 +164,8 @@ struct OnboardingView: View {
             onboardingTitle(
                 appLanguage.text(ru: "Сколько слов давать каждый день?", en: "How many words per day?"),
                 subtitle: appLanguage.text(
-                    ru: "Начнем мягко: ежедневный набор будет обновляться и попадать в тренировку.",
-                    en: "We will keep it light: your daily set refreshes and feeds practice."
+                    ru: "Цель влияет на капсулу сверху, статистику и размер ежедневного набора.",
+                    en: "The goal drives the top capsule, stats, and daily word set size."
                 )
             )
 
@@ -195,8 +209,8 @@ struct OnboardingView: View {
             onboardingTitle(
                 appLanguage.text(ru: "Какие слова тебе нужны?", en: "Which words do you need?"),
                 subtitle: appLanguage.text(
-                    ru: "Выбери несколько направлений. Это влияет на ежедневный набор.",
-                    en: "Choose a few areas. This shapes your daily set."
+                    ru: "Темы влияют на ежедневный набор и сортировку новых слов.",
+                    en: "Topics shape the daily set and new-word sorting."
                 )
             )
 
@@ -236,8 +250,8 @@ struct OnboardingView: View {
                 }
             }
 
-            primaryButton(title: appLanguage.text(ru: "Начать мини-тест", en: "Start mini test")) {
-                goToPage(4)
+            primaryButton(title: appLanguage.text(ru: "Начать тест", en: "Start test")) {
+                startAssessment()
             }
             .disabled(selectedTopics.isEmpty)
             .opacity(selectedTopics.isEmpty ? 0.5 : 1)
@@ -245,14 +259,14 @@ struct OnboardingView: View {
     }
 
     private var quizPage: some View {
-        let word = quizWords[quizIndex]
+        let word = currentQuizWord
 
         return VStack(alignment: .leading, spacing: 18) {
             onboardingTitle(
                 appLanguage.text(ru: "Выбери перевод", en: "Choose the translation"),
                 subtitle: appLanguage.text(
-                    ru: "Так приложение поймет, какие слова уже знакомы, а какие добавить в тренировку.",
-                    en: "This tells the app what you know and what should go into practice."
+                    ru: "Вопрос \(quizIndex + 1)/\(quizLimit). Сейчас сложность: \(currentAssessmentLevel.tag).",
+                    en: "Question \(quizIndex + 1)/\(quizLimit). Current difficulty: \(currentAssessmentLevel.tag)."
                 )
             )
 
@@ -260,6 +274,8 @@ struct OnboardingView: View {
                 Text(word.english)
                     .font(.system(size: 40, weight: .black, design: .serif))
                     .foregroundStyle(.black)
+                    .minimumScaleFactor(0.65)
+                    .lineLimit(1)
 
                 Text(word.ipa)
                     .font(.system(size: 14, weight: .bold, design: .rounded))
@@ -280,12 +296,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 12) {
                 ForEach(WordBank.translationChoices(for: word), id: \.self) { choice in
-                    OutlineButton(
-                        title: choice,
-                        subtitle: nil,
-                        isSelected: false,
-                        icon: nil
-                    ) {
+                    OutlineButton(title: choice, subtitle: nil, isSelected: false, icon: nil) {
                         answerQuiz(choice == word.russian)
                     }
                 }
@@ -309,23 +320,18 @@ struct OnboardingView: View {
             onboardingTitle(
                 appLanguage.text(ru: "Готово. Я собрал твой старт.", en: "Done. Your start is ready."),
                 subtitle: appLanguage.text(
-                    ru: "Уровень скорректирован по ответам, а незнакомые слова попадут в ежедневный набор.",
-                    en: "Your level was calibrated, and unknown words will enter the daily set."
+                    ru: "Уровень и Atlas Score рассчитаны по адаптивному тесту. Ошибки сразу попадут в повторение.",
+                    en: "Your level and Atlas Score are based on the adaptive test. Mistakes go straight to review."
                 )
-            )
-
-            let calibratedLevel = LearningLevel.calibrated(
-                from: selectedLevel,
-                knownCount: knownCount,
-                total: quizWords.count
             )
 
             VStack(alignment: .leading, spacing: 13) {
                 summaryRow(
                     icon: "chart.bar",
                     title: appLanguage.text(ru: "Уровень", en: "Level"),
-                    value: "\(calibratedLevel.tag) \(calibratedLevel.title(for: appLanguage))"
+                    value: "\(currentAssessmentLevel.tag) \(currentAssessmentLevel.title(for: appLanguage))"
                 )
+                summaryRow(icon: "flag.checkered", title: "Atlas Score", value: "\(adaptiveScore)/160")
                 summaryRow(
                     icon: "bookmark",
                     title: appLanguage.text(ru: "Слов в день", en: "Words per day"),
@@ -347,7 +353,7 @@ struct OnboardingView: View {
             .shadow(color: AtlasColors.line, radius: 0, y: 6)
 
             primaryButton(title: appLanguage.text(ru: "Открыть слова дня", en: "Open daily words")) {
-                finishOnboarding(level: calibratedLevel)
+                finishOnboarding(level: currentAssessmentLevel, score: adaptiveScore)
             }
         }
     }
@@ -404,17 +410,20 @@ struct OnboardingView: View {
     }
 
     private func answerQuiz(_ isCorrect: Bool) {
-        let word = quizWords[quizIndex]
+        let word = currentQuizWord
+        askedWordIDs.insert(word.id)
 
         if isCorrect {
             AtlasHaptics.success()
-            knownCount += 1
+            correctAnswers += 1
+            adaptiveScore = min(160, adaptiveScore + 4 + max(0, word.level.order - selectedLevel.order))
         } else {
             AtlasHaptics.warning()
             unknownWordIDs.insert(word.id)
+            adaptiveScore = max(0, adaptiveScore - 4)
         }
 
-        if quizIndex < quizWords.count - 1 {
+        if quizIndex < quizLimit - 1 {
             withAnimation(.atlasSpring) {
                 quizIndex += 1
             }
@@ -423,26 +432,31 @@ struct OnboardingView: View {
         }
     }
 
-    private func finishOnboarding(level: LearningLevel) {
+    private func finishOnboarding(level: LearningLevel, score: Int) {
         AtlasHaptics.success()
         var unknown = Array(unknownWordIDs)
 
         if unknown.isEmpty {
             unknown = WordBank.all
-                .filter { $0.level.order <= min(level.order + 1, LearningLevel.advanced.order) }
+                .filter { $0.level.order <= min(level.order + 1, LearningLevel.c2.order) }
                 .prefix(3)
                 .map(\.id)
         }
 
+        let weakMemory = WordMemory(correctCount: 0, wrongCount: 1, streak: 0, mastery: 0, lastPracticedAt: nil, dueAt: Date())
         let profile = AtlasProfile(
             appLanguage: appLanguage,
-            level: level,
+            currentLevel: level,
+            score0To160: score,
             dailyGoal: dailyGoal,
             selectedTopics: Array(selectedTopics),
             unknownWordIDs: unknown,
             savedWordIDs: [],
             favoriteWordIDs: [],
             completedTodayIDs: [],
+            wordProgress: Dictionary(uniqueKeysWithValues: unknown.map { ($0, weakMemory) }),
+            dailyProgress: [:],
+            practiceHistory: [],
             streak: 0,
             xp: 0
         )
@@ -456,18 +470,29 @@ struct OnboardingView: View {
         }
     }
 
+    private func startAssessment() {
+        adaptiveScore = selectedLevel.scoreStart + 8
+        quizIndex = 0
+        correctAnswers = 0
+        unknownWordIDs = []
+        askedWordIDs = []
+        goToPage(4)
+    }
+
     private func levelSubtitle(_ level: LearningLevel) -> String {
         switch level {
-        case .beginner:
+        case .a1:
             appLanguage.text(ru: "Знаю простые фразы", en: "I know simple phrases")
-        case .elementary:
+        case .a2:
             appLanguage.text(ru: "Могу читать короткие тексты", en: "I can read short texts")
-        case .intermediate:
+        case .b1:
             appLanguage.text(ru: "Понимаю смысл, но не все нюансы", en: "I understand meaning, not every nuance")
-        case .upperIntermediate:
+        case .b2:
             appLanguage.text(ru: "Хочу точнее говорить и писать", en: "I want sharper speaking and writing")
-        case .advanced:
+        case .c1:
             appLanguage.text(ru: "Ищу редкие и точные слова", en: "I want rare, precise words")
+        case .c2:
+            appLanguage.text(ru: "Понимаю сложные оттенки смысла", en: "I understand subtle shades of meaning")
         }
     }
 
@@ -479,6 +504,10 @@ struct OnboardingView: View {
         case "Emotions": "heart"
         case "Travel": "map"
         case "Business": "chart.line.uptrend.xyaxis"
+        case "Health": "cross.case"
+        case "Tech": "cpu"
+        case "Culture": "theatermasks"
+        case "Nature": "leaf"
         default: "square.grid.2x2"
         }
     }

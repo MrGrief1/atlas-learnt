@@ -9,6 +9,8 @@ enum WordBankFilter: String, CaseIterable, Identifiable {
     case all
     case saved
     case unknown
+    case weak
+    case mastered
 
     var id: String { rawValue }
 
@@ -17,6 +19,8 @@ enum WordBankFilter: String, CaseIterable, Identifiable {
         case .all: language.text(ru: "Все", en: "All")
         case .saved: language.text(ru: "Сохраненные", en: "Saved")
         case .unknown: language.text(ru: "Повторить", en: "Review")
+        case .weak: language.text(ru: "Слабые", en: "Weak")
+        case .mastered: language.text(ru: "Освоено", en: "Mastered")
         }
     }
 }
@@ -28,6 +32,8 @@ struct WordBankView: View {
 
     @State private var searchText = ""
     @State private var filter: WordBankFilter = .all
+    @State private var levelFilter: LearningLevel?
+    @State private var topicFilter: String?
 
     private var language: AppLanguage {
         profile.appLanguage
@@ -44,9 +50,15 @@ struct WordBankView: View {
                 matchesFilter = profile.savedWordIDs.contains(word.id)
             case .unknown:
                 matchesFilter = profile.unknownWordIDs.contains(word.id)
+            case .weak:
+                matchesFilter = profile.weakWordIDs.contains(word.id)
+            case .mastered:
+                matchesFilter = (profile.wordProgress[word.id]?.mastery ?? 0) >= 70
             }
 
             guard matchesFilter else { return false }
+            if let levelFilter, word.level != levelFilter { return false }
+            if let topicFilter, word.topic != topicFilter { return false }
 
             if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return true
@@ -108,6 +120,8 @@ struct WordBankView: View {
                     filter.title(for: language)
                 }
 
+                filterChips
+
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 14) {
                         ForEach(filteredWords) { word in
@@ -126,6 +140,64 @@ struct WordBankView: View {
         .atlasMotion(filter)
         .atlasSoftMotion(searchText)
         .atlasSoftMotion(profile)
+    }
+
+    private var filterChips: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    chip(
+                        title: language.text(ru: "Все уровни", en: "All levels"),
+                        isSelected: levelFilter == nil
+                    ) {
+                        levelFilter = nil
+                    }
+
+                    ForEach(LearningLevel.allCases) { level in
+                        chip(title: level.tag, isSelected: levelFilter == level) {
+                            levelFilter = level
+                        }
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    chip(
+                        title: language.text(ru: "Все темы", en: "All topics"),
+                        isSelected: topicFilter == nil
+                    ) {
+                        topicFilter = nil
+                    }
+
+                    ForEach(WordBank.topics, id: \.self) { topic in
+                        chip(title: WordBank.topicTitle(topic, for: language), isSelected: topicFilter == topic) {
+                            topicFilter = topic
+                        }
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+        }
+    }
+
+    private func chip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            AtlasHaptics.selection()
+            withAnimation(.atlasSpring) {
+                action()
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(isSelected ? .white : .black)
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .background(Capsule().fill(isSelected ? AtlasColors.ink : .white))
+                .overlay(Capsule().stroke(AtlasColors.line, lineWidth: 1.6))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -149,6 +221,12 @@ struct WordBankRow: View {
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(Capsule().fill(AtlasColors.mint.opacity(0.6)))
+
+                    Text("\(profile.wordProgress[word.id]?.mastery ?? 0)%")
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.black.opacity(0.06)))
                 }
 
                 Text(word.russian)
