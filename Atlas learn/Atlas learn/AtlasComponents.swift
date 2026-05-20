@@ -17,6 +17,12 @@ enum AtlasColors {
     static let softLine = Color.black.opacity(0.28)
 }
 
+enum AtlasLayout {
+    static let screenPadding: CGFloat = 26
+    static let modalPadding: CGFloat = 20
+    static let scrollShadowPadding: CGFloat = 0
+}
+
 struct CircleIconButton: View {
     let systemName: String
     var foreground: Color = .white

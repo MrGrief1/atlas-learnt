@@ -98,7 +98,7 @@ struct PracticeView: View {
                     .buttonStyle(.plain)
                     .disabled(selectedChoice != nil)
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, AtlasLayout.screenPadding)
                 .padding(.top, 20)
                 .padding(.bottom, 132)
             }
@@ -155,7 +155,7 @@ struct PracticeView: View {
             }
             .colorScheme(.dark)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, AtlasLayout.screenPadding)
         .padding(.top, 12)
         .padding(.bottom, 6)
     }
@@ -222,7 +222,8 @@ struct PracticeView: View {
 
             Spacer()
         }
-        .padding(20)
+        .padding(.horizontal, AtlasLayout.screenPadding)
+        .padding(.vertical, 20)
     }
 
     private func answerButton(_ choice: String) -> some View {
@@ -299,7 +300,8 @@ struct PracticeView: View {
             .buttonStyle(.plain)
         }
         .foregroundStyle(.black)
-        .padding(16)
+        .padding(.horizontal, AtlasLayout.screenPadding)
+        .padding(.vertical, 16)
         .background(AtlasColors.paper)
         .overlay(Rectangle().fill(.black.opacity(0.08)).frame(height: 1), alignment: .top)
     }

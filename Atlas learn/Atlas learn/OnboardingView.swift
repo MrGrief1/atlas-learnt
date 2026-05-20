@@ -44,7 +44,7 @@ struct OnboardingView: View {
                             resultPage
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, AtlasLayout.screenPadding)
                     .padding(.top, 16)
                     .padding(.bottom, 30)
                 }
@@ -82,7 +82,7 @@ struct OnboardingView: View {
             }
             .frame(height: 8)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, AtlasLayout.screenPadding)
         .padding(.top, 14)
         .padding(.bottom, 8)
     }

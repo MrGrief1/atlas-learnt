@@ -116,10 +116,12 @@ struct WordBankView: View {
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
+                    .padding(.horizontal, AtlasLayout.scrollShadowPadding)
                     .padding(.bottom, 24)
                 }
+                .scrollClipDisabled()
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, AtlasLayout.modalPadding - AtlasLayout.scrollShadowPadding)
             .padding(.top, 20)
         }
         .atlasMotion(filter)

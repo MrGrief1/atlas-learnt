@@ -58,7 +58,7 @@ struct HomeView: View {
 
                 bottomNavigation
             }
-            .padding(.horizontal, 22)
+            .padding(.horizontal, AtlasLayout.screenPadding)
             .padding(.top, 16)
             .padding(.bottom, 18)
         }
@@ -189,7 +189,7 @@ struct HomeView: View {
     private func wordPage(for word: WordEntry, in size: CGSize) -> some View {
         ZStack {
             wordCard(for: word)
-                .padding(.horizontal, 22)
+                .padding(.horizontal, AtlasLayout.screenPadding)
                 .position(x: size.width / 2, y: size.height * 0.48)
 
             actionRow(for: word)
@@ -444,7 +444,8 @@ struct WordInfoView: View {
                 Spacer()
             }
             .foregroundStyle(.black)
-            .padding(20)
+            .padding(.horizontal, AtlasLayout.screenPadding)
+            .padding(.vertical, 20)
         }
     }
 }
@@ -481,7 +482,8 @@ struct StatsView: View {
 
                 Spacer()
             }
-            .padding(20)
+            .padding(.horizontal, AtlasLayout.screenPadding)
+            .padding(.vertical, 20)
         }
     }
 

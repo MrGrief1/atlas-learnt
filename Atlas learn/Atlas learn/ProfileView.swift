@@ -62,10 +62,12 @@ struct ProfileView: View {
                             )
                         }
                     }
+                    .padding(.horizontal, AtlasLayout.scrollShadowPadding)
                     .padding(.bottom, 24)
                 }
+                .scrollClipDisabled()
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, AtlasLayout.modalPadding - AtlasLayout.scrollShadowPadding)
             .padding(.top, 20)
         }
         .atlasSoftMotion(profile.appLanguage)
@@ -329,10 +331,12 @@ struct VoicePickerView: View {
                             }
                         }
                     }
+                    .padding(.horizontal, AtlasLayout.scrollShadowPadding)
                     .padding(.bottom, 24)
                 }
+                .scrollClipDisabled()
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, AtlasLayout.modalPadding - AtlasLayout.scrollShadowPadding)
             .padding(.top, 20)
         }
         .atlasMotion(profile.selectedSpeechVoice)
