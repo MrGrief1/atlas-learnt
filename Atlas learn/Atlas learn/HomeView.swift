@@ -41,6 +41,8 @@ struct HomeView: View {
                 Spacer(minLength: 80)
 
                 wordCard
+                    .id(currentWord.id)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
 
                 Spacer(minLength: 56)
 
@@ -64,6 +66,8 @@ struct HomeView: View {
                     }
                 }
         )
+        .atlasMotion(currentWord.id)
+        .atlasSoftMotion(profile)
         .fullScreenCover(isPresented: $showsProfile) {
             ProfileView(
                 profile: $profile,
@@ -185,7 +189,7 @@ struct HomeView: View {
 
             CircleIconButton(systemName: "square.and.arrow.up", size: 54) {
                 profile.markCompleted(currentWord.id)
-                nextWord()
+                nextWord(triggerHaptic: false)
             }
 
             CircleIconButton(
@@ -215,6 +219,7 @@ struct HomeView: View {
             Spacer()
 
             Button {
+                AtlasHaptics.tap()
                 showsPractice = true
             } label: {
                 HStack(spacing: 12) {
@@ -240,15 +245,25 @@ struct HomeView: View {
         }
     }
 
-    private func nextWord() {
+    private func nextWord(triggerHaptic: Bool = true) {
         guard !dailyWords.isEmpty else { return }
+
+        if triggerHaptic {
+            AtlasHaptics.impact(.soft)
+        }
+
         withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
             currentIndex = (currentIndex + 1) % dailyWords.count
         }
     }
 
-    private func previousWord() {
+    private func previousWord(triggerHaptic: Bool = true) {
         guard !dailyWords.isEmpty else { return }
+
+        if triggerHaptic {
+            AtlasHaptics.impact(.soft)
+        }
+
         withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
             currentIndex = (currentIndex - 1 + dailyWords.count) % dailyWords.count
         }

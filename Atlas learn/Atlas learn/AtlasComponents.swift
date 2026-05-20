@@ -22,11 +22,14 @@ struct CircleIconButton: View {
     var foreground: Color = .white
     var fill: Color = Color.white.opacity(0.02)
     var border: Color = Color.white.opacity(0.14)
-    var size: CGFloat = 58
+    var size: CGFloat = 52
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            AtlasHaptics.tap()
+            action()
+        } label: {
             Image(systemName: systemName)
                 .font(.system(size: size * 0.43, weight: .medium))
                 .foregroundStyle(foreground)
@@ -34,7 +37,7 @@ struct CircleIconButton: View {
                 .background(
                     Circle()
                         .fill(fill)
-                        .shadow(color: .black.opacity(0.26), radius: 14, y: 12)
+                        .shadow(color: .black.opacity(0.24), radius: 12, y: 10)
                 )
                 .overlay(
                     Circle()
@@ -51,11 +54,14 @@ struct PaperIconButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            AtlasHaptics.tap()
+            action()
+        } label: {
             Image(systemName: systemName)
-                .font(.system(size: 30, weight: .semibold))
+                .font(.system(size: 26, weight: .semibold))
                 .foregroundStyle(.black)
-                .frame(width: 74, height: 74)
+                .frame(width: 60, height: 60)
                 .background(Circle().fill(Color.white.opacity(0.58)))
                 .overlay(Circle().stroke(.white, lineWidth: 1))
         }
@@ -71,22 +77,25 @@ struct OutlineButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
+        Button {
+            AtlasHaptics.selection()
+            action()
+        } label: {
+            HStack(spacing: 12) {
                 if let icon {
                     Image(systemName: icon)
-                        .font(.system(size: 22, weight: .semibold))
-                        .frame(width: 36, height: 36)
+                        .font(.system(size: 19, weight: .semibold))
+                        .frame(width: 30, height: 30)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.system(size: 20, weight: .heavy))
+                        .font(.system(size: 17, weight: .heavy))
                         .foregroundStyle(.black)
 
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.black.opacity(0.62))
                     }
                 }
@@ -94,20 +103,21 @@ struct OutlineButton: View {
                 Spacer()
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 19, weight: .bold))
                     .foregroundStyle(isSelected ? AtlasColors.green : .black.opacity(0.28))
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 13)
             .background(isSelected ? AtlasColors.mint.opacity(0.7) : .white)
-            .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 25, style: .continuous)
+                RoundedRectangle(cornerRadius: 21, style: .continuous)
                     .stroke(AtlasColors.line, lineWidth: 2)
             )
-            .shadow(color: AtlasColors.line, radius: 0, y: 6)
+            .shadow(color: AtlasColors.line, radius: 0, y: 5)
         }
         .buttonStyle(.plain)
+        .atlasMotion(isSelected)
     }
 }
 
@@ -118,13 +128,13 @@ struct CapsuleMetric: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
             Text(title)
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: 13, weight: .bold))
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 13)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
         .background(Capsule().fill(Color.white.opacity(0.08)))
         .overlay(Capsule().stroke(Color.white.opacity(0.13), lineWidth: 1))
     }
@@ -149,13 +159,13 @@ struct TopicMiniIllustration: View {
     var body: some View {
         ZStack {
             TinyDotsShadow()
-                .frame(width: 106, height: 42)
+                .frame(width: 88, height: 34)
                 .rotationEffect(.degrees(-4))
-                .offset(x: 5, y: 34)
+                .offset(x: 4, y: 28)
 
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(AtlasColors.mint.opacity(0.9))
-                .frame(width: 112, height: 82)
+                .frame(width: 94, height: 68)
                 .rotationEffect(.degrees(-9))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -165,7 +175,7 @@ struct TopicMiniIllustration: View {
 
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(0.92))
-                .frame(width: 96, height: 70)
+                .frame(width: 80, height: 58)
                 .rotationEffect(.degrees(7))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -174,9 +184,9 @@ struct TopicMiniIllustration: View {
                 )
 
             Image(systemName: icon)
-                .font(.system(size: 38, weight: .black))
+                .font(.system(size: 31, weight: .black))
                 .foregroundStyle(.black)
         }
-        .frame(height: 126)
+        .frame(height: 104)
     }
 }

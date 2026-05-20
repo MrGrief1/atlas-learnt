@@ -34,10 +34,18 @@ struct PracticeView: View {
 
             if isFinished {
                 completionView
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
             } else {
                 challengeView
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
             }
         }
+        .atlasMotion(index)
+        .atlasMotion(selectedChoice)
+        .atlasMotion(lastAnswerWasCorrect)
+        .atlasMotion(hearts)
+        .atlasSoftMotion(isFinished)
+        .atlasSoftMotion(profile.appLanguage)
     }
 
     private var challengeView: some View {
@@ -105,9 +113,10 @@ struct PracticeView: View {
     private var practiceHeader: some View {
         VStack(spacing: 16) {
             HStack(spacing: 14) {
-                Button {
-                    dismiss()
-                } label: {
+                    Button {
+                        AtlasHaptics.tap()
+                        dismiss()
+                    } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 22, weight: .black))
                         .foregroundStyle(.black)
@@ -196,6 +205,7 @@ struct PracticeView: View {
             .padding(.top, 10)
 
             Button {
+                AtlasHaptics.tap()
                 dismiss()
             } label: {
                 Text(profile.appLanguage.text(ru: "Вернуться к словам", en: "Back to words"))
@@ -275,6 +285,7 @@ struct PracticeView: View {
             }
 
             Button {
+                AtlasHaptics.tap()
                 continuePractice()
             } label: {
                 Text(profile.appLanguage.text(ru: "Продолжить", en: "Continue"))
@@ -321,8 +332,17 @@ struct PracticeView: View {
         guard selectedChoice == nil else { return }
 
         let isCorrect = choice == currentWord.russian
-        selectedChoice = choice ?? ""
-        lastAnswerWasCorrect = isCorrect
+
+        if isCorrect {
+            AtlasHaptics.success()
+        } else {
+            AtlasHaptics.error()
+        }
+
+        withAnimation(.atlasSpring) {
+            selectedChoice = choice ?? ""
+            lastAnswerWasCorrect = isCorrect
+        }
 
         if isCorrect {
             sessionXP += 10
@@ -334,8 +354,10 @@ struct PracticeView: View {
     }
 
     private func continuePractice() {
-        selectedChoice = nil
-        lastAnswerWasCorrect = nil
+        withAnimation(.atlasSpring) {
+            selectedChoice = nil
+            lastAnswerWasCorrect = nil
+        }
 
         if hearts == 0 || index >= practiceWords.count - 1 {
             finishSession()
@@ -348,7 +370,9 @@ struct PracticeView: View {
 
     private func finishSession() {
         guard !didCommitSession else {
-            isFinished = true
+            withAnimation(.atlasSoftSpring) {
+                isFinished = true
+            }
             return
         }
 
@@ -359,6 +383,10 @@ struct PracticeView: View {
             profile.streak += 1
         }
 
-        isFinished = true
+        AtlasHaptics.success()
+
+        withAnimation(.atlasSoftSpring) {
+            isFinished = true
+        }
     }
 }

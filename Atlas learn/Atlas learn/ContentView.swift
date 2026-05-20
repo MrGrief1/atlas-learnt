@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     @AppStorage("atlas.hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage("atlas.profile") private var storedProfile = ""
 
@@ -31,6 +33,10 @@ struct ContentView: View {
         .onAppear {
             profile = loadProfile()
         }
+        .dynamicTypeSize(.medium)
+        .atlasSoftMotion(hasCompletedOnboarding)
+        .atlasSoftMotion(profile)
+        .atlasSoftMotion(dynamicTypeSize)
         .onChange(of: profile) { _, newValue in
             save(newValue)
         }

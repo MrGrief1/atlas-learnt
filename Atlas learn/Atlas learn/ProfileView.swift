@@ -73,6 +73,11 @@ struct ProfileView: View {
             .padding(.top, 78)
             .ignoresSafeArea(edges: .bottom)
         }
+        .atlasSoftMotion(profile.appLanguage)
+        .atlasMotion(profile.dailyGoal)
+        .onChange(of: profile.appLanguage) { _, _ in
+            AtlasHaptics.selection()
+        }
     }
 
     private var header: some View {
@@ -84,7 +89,9 @@ struct ProfileView: View {
             Spacer()
 
             PaperIconButton(systemName: "gearshape") {
-                profile.dailyGoal = profile.dailyGoal == 5 ? 7 : 5
+                withAnimation(.atlasSpring) {
+                    profile.dailyGoal = profile.dailyGoal == 5 ? 7 : 5
+                }
             }
         }
     }
@@ -133,6 +140,7 @@ struct ProfileView: View {
 
     private var takeTestCard: some View {
         Button {
+            AtlasHaptics.warning()
             resetOnboarding()
             dismiss()
         } label: {

@@ -70,6 +70,7 @@ struct WordBankView: View {
                     Spacer()
 
                     Button {
+                        AtlasHaptics.tap()
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -112,6 +113,7 @@ struct WordBankView: View {
                     LazyVStack(spacing: 14) {
                         ForEach(filteredWords) { word in
                             WordBankRow(word: word, profile: $profile)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
                     .padding(.bottom, 24)
@@ -119,6 +121,12 @@ struct WordBankView: View {
             }
             .padding(.horizontal, 22)
             .padding(.top, 24)
+        }
+        .atlasMotion(filter)
+        .atlasSoftMotion(searchText)
+        .atlasSoftMotion(profile)
+        .onChange(of: filter) { _, _ in
+            AtlasHaptics.selection()
         }
     }
 }
@@ -158,14 +166,20 @@ struct WordBankRow: View {
 
             VStack(spacing: 12) {
                 Button {
-                    profile.toggleSaved(word.id)
+                    AtlasHaptics.selection()
+                    withAnimation(.atlasSpring) {
+                        profile.toggleSaved(word.id)
+                    }
                 } label: {
                     Image(systemName: profile.savedWordIDs.contains(word.id) ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 22, weight: .bold))
                 }
 
                 Button {
-                    profile.toggleFavorite(word.id)
+                    AtlasHaptics.selection()
+                    withAnimation(.atlasSpring) {
+                        profile.toggleFavorite(word.id)
+                    }
                 } label: {
                     Image(systemName: profile.favoriteWordIDs.contains(word.id) ? "heart.fill" : "heart")
                         .font(.system(size: 22, weight: .bold))
@@ -183,5 +197,8 @@ struct WordBankRow: View {
                 .stroke(.black.opacity(0.72), lineWidth: 2)
         )
         .shadow(color: .black.opacity(0.65), radius: 0, y: 5)
+        .atlasMotion(profile.savedWordIDs.contains(word.id))
+        .atlasMotion(profile.favoriteWordIDs.contains(word.id))
+        .atlasSoftMotion(language)
     }
 }

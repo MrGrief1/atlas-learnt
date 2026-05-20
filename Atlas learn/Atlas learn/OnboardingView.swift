@@ -50,6 +50,12 @@ struct OnboardingView: View {
                 }
             }
         }
+        .atlasMotion(page)
+        .atlasSoftMotion(appLanguage)
+        .atlasMotion(selectedLevel)
+        .atlasMotion(dailyGoal)
+        .atlasMotion(selectedTopics)
+        .atlasMotion(quizIndex)
     }
 
     private var progressHeader: some View {
@@ -98,12 +104,14 @@ struct OnboardingView: View {
                     isSelected: appLanguage == language,
                     icon: language == .russian ? "textformat" : "character.book.closed"
                 ) {
-                    appLanguage = language
+                    withAnimation(.atlasSpring) {
+                        appLanguage = language
+                    }
                 }
             }
 
             primaryButton(title: appLanguage.text(ru: "Продолжить", en: "Continue")) {
-                page = 1
+                goToPage(1)
             }
         }
     }
@@ -125,12 +133,14 @@ struct OnboardingView: View {
                     isSelected: selectedLevel == level,
                     icon: "graduationcap"
                 ) {
-                    selectedLevel = level
+                    withAnimation(.atlasSpring) {
+                        selectedLevel = level
+                    }
                 }
             }
 
             primaryButton(title: appLanguage.text(ru: "Дальше", en: "Next")) {
-                page = 2
+                goToPage(2)
             }
         }
     }
@@ -148,7 +158,10 @@ struct OnboardingView: View {
             HStack(spacing: 14) {
                 ForEach([5, 7, 10], id: \.self) { amount in
                     Button {
-                        dailyGoal = amount
+                        AtlasHaptics.selection()
+                        withAnimation(.atlasSpring) {
+                            dailyGoal = amount
+                        }
                     } label: {
                         VStack(spacing: 8) {
                             Text("\(amount)")
@@ -172,7 +185,7 @@ struct OnboardingView: View {
             }
 
             primaryButton(title: appLanguage.text(ru: "Выбрать темы", en: "Pick topics")) {
-                page = 3
+                goToPage(3)
             }
         }
     }
@@ -190,10 +203,13 @@ struct OnboardingView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
                 ForEach(WordBank.topics, id: \.self) { topic in
                     Button {
-                        if selectedTopics.contains(topic) {
-                            selectedTopics.remove(topic)
-                        } else {
-                            selectedTopics.insert(topic)
+                        AtlasHaptics.selection()
+                        withAnimation(.atlasSpring) {
+                            if selectedTopics.contains(topic) {
+                                selectedTopics.remove(topic)
+                            } else {
+                                selectedTopics.insert(topic)
+                            }
                         }
                     } label: {
                         VStack(spacing: 12) {
@@ -221,7 +237,7 @@ struct OnboardingView: View {
             }
 
             primaryButton(title: appLanguage.text(ru: "Начать мини-тест", en: "Start mini test")) {
-                page = 4
+                goToPage(4)
             }
             .disabled(selectedTopics.isEmpty)
             .opacity(selectedTopics.isEmpty ? 0.5 : 1)
@@ -352,7 +368,10 @@ struct OnboardingView: View {
     }
 
     private func primaryButton(title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            AtlasHaptics.tap()
+            action()
+        } label: {
             Text(title)
                 .font(.system(size: 19, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
@@ -388,19 +407,24 @@ struct OnboardingView: View {
         let word = quizWords[quizIndex]
 
         if isCorrect {
+            AtlasHaptics.success()
             knownCount += 1
         } else {
+            AtlasHaptics.warning()
             unknownWordIDs.insert(word.id)
         }
 
         if quizIndex < quizWords.count - 1 {
-            quizIndex += 1
+            withAnimation(.atlasSpring) {
+                quizIndex += 1
+            }
         } else {
-            page = 5
+            goToPage(5)
         }
     }
 
     private func finishOnboarding(level: LearningLevel) {
+        AtlasHaptics.success()
         var unknown = Array(unknownWordIDs)
 
         if unknown.isEmpty {
@@ -424,6 +448,12 @@ struct OnboardingView: View {
         )
 
         onComplete(profile)
+    }
+
+    private func goToPage(_ nextPage: Int) {
+        withAnimation(.atlasSpring) {
+            page = nextPage
+        }
     }
 
     private func levelSubtitle(_ level: LearningLevel) -> String {
