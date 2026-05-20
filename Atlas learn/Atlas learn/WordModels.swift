@@ -279,6 +279,11 @@ struct WordEntry: Codable, Hashable, Identifiable {
 
     var cefrLevel: LearningLevel { level }
 
+    var hasReadableRussian: Bool {
+        !russian.localizedCaseInsensitiveContains("учебное слово:") &&
+            russian.range(of: #"\p{Cyrillic}"#, options: .regularExpression) != nil
+    }
+
     func definition(for language: AppLanguage) -> String {
         language.text(ru: definitionRU, en: definitionEN)
     }
@@ -769,10 +774,6 @@ enum WordBank {
         return fallbackWords()
     }()
 
-    nonisolated static func entry(id: String) -> WordEntry? {
-        all.first { $0.id == id }
-    }
-
     static func topicTitle(_ topic: String, for language: AppLanguage) -> String {
         switch topic {
         case "Everyday": language.text(ru: "Каждый день", en: "Everyday")
@@ -797,7 +798,9 @@ enum WordBank {
             profile.wordProgress[word.id]?.isDue(on: now) == true
         }
 
-        let unknown = profile.unknownWordIDs.compactMap(entry)
+        let unknown = profile.unknownWordIDs.compactMap { id in
+            all.first { $0.id == id }
+        }
         let currentLevel = all.filter { word in
             word.level.order <= profile.currentLevel.order &&
                 (selectedTopics.isEmpty || selectedTopics.contains(word.topic))
@@ -806,7 +809,9 @@ enum WordBank {
             word.level == profile.currentLevel.next &&
                 (selectedTopics.isEmpty || selectedTopics.contains(word.topic))
         }
-        let saved = profile.savedWordIDs.compactMap(entry)
+        let saved = profile.savedWordIDs.compactMap { id in
+            all.first { $0.id == id }
+        }
 
         let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 1
         let streams = [
@@ -839,8 +844,8 @@ enum WordBank {
 
     static func assessmentWords(startingAt level: LearningLevel) -> [WordEntry] {
         let desiredLevels = LearningLevel.allCases
-        let primary = all.filter { abs($0.level.order - level.order) <= 1 }
-        let broader = desiredLevels.flatMap { level in all.filter { $0.level == level }.prefix(6) }
+        let primary = all.filter { abs($0.level.order - level.order) <= 1 && isAssessmentReady($0) }
+        let broader = desiredLevels.flatMap { level in all.filter { $0.level == level && isAssessmentReady($0) }.prefix(6) }
         return Array((primary + broader).uniquedByID().prefix(30))
     }
 
@@ -848,9 +853,13 @@ enum WordBank {
         assessmentWords(startingAt: .a2)
     }
 
+    static func isAssessmentReady(_ word: WordEntry) -> Bool {
+        word.hasReadableRussian && word.english.rangeOfCharacter(from: .decimalDigits) == nil
+    }
+
     static func translationChoices(for word: WordEntry) -> [String] {
         let pool = all
-            .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 }
+            .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 && $0.hasReadableRussian }
             .map(\.russian)
         return choices(correct: word.russian, distractors: pool, seed: seed(for: word.id))
     }

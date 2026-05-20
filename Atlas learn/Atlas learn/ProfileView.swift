@@ -378,7 +378,7 @@ struct VoiceOptionRow: View {
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 24, weight: .black))
-                    .foregroundStyle(isSelected ? AtlasColors.green : .black.opacity(0.34))
+                    .foregroundStyle(isSelected ? .black : .black.opacity(0.34))
             }
             .padding(15)
             .background(.white)

@@ -34,6 +34,8 @@ struct ContentView: View {
             profile = loadProfile()
         }
         .dynamicTypeSize(.medium)
+        .preferredColorScheme(.light)
+        .tint(.black)
         .atlasSoftMotion(hasCompletedOnboarding)
         .atlasSoftMotion(profile)
         .atlasSoftMotion(dynamicTypeSize)

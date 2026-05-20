@@ -25,6 +25,11 @@ enum WordBankFilter: String, CaseIterable, Identifiable {
     }
 }
 
+private enum WordBankPickerKind: Hashable {
+    case level
+    case topic
+}
+
 struct WordBankView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -34,6 +39,7 @@ struct WordBankView: View {
     @State private var filter: WordBankFilter = .all
     @State private var levelFilter: LearningLevel?
     @State private var topicFilter: String?
+    @State private var expandedPicker: WordBankPickerKind?
 
     private var language: AppLanguage {
         profile.appLanguage
@@ -120,7 +126,7 @@ struct WordBankView: View {
                     filter.title(for: language)
                 }
 
-                filterChips
+                filterControls
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 14) {
@@ -136,68 +142,296 @@ struct WordBankView: View {
             }
             .padding(.horizontal, AtlasLayout.modalPadding - AtlasLayout.scrollShadowPadding)
             .padding(.top, 20)
+            .foregroundStyle(.black)
         }
         .atlasMotion(filter)
         .atlasSoftMotion(searchText)
         .atlasSoftMotion(profile)
     }
 
-    private var filterChips: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    chip(
-                        title: language.text(ru: "Все уровни", en: "All levels"),
-                        isSelected: levelFilter == nil
-                    ) {
+    private var filterControls: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                filterSelector(
+                    kind: .level,
+                    icon: "slider.horizontal.3",
+                    title: language.text(ru: "Уровень", en: "Level"),
+                    value: levelFilter?.tag ?? language.text(ru: "Все", en: "All")
+                )
+
+                filterSelector(
+                    kind: .topic,
+                    icon: "square.grid.2x2",
+                    title: language.text(ru: "Тема", en: "Topic"),
+                    value: topicFilter.map { WordBank.topicTitle($0, for: language) } ?? language.text(ru: "Все", en: "All")
+                )
+
+                Button {
+                    AtlasHaptics.selection()
+                    withAnimation(.atlasSpring) {
                         levelFilter = nil
-                    }
-
-                    ForEach(LearningLevel.allCases) { level in
-                        chip(title: level.tag, isSelected: levelFilter == level) {
-                            levelFilter = level
-                        }
-                    }
-                }
-                .padding(.horizontal, 1)
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    chip(
-                        title: language.text(ru: "Все темы", en: "All topics"),
-                        isSelected: topicFilter == nil
-                    ) {
                         topicFilter = nil
+                        expandedPicker = nil
                     }
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 17, weight: .black))
+                        .foregroundStyle(.black)
+                        .frame(width: 48, height: 54)
+                        .background(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(AtlasColors.line, lineWidth: 2)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(levelFilter == nil && topicFilter == nil)
+                .opacity(levelFilter == nil && topicFilter == nil ? 0.45 : 1)
+            }
 
-                    ForEach(WordBank.topics, id: \.self) { topic in
-                        chip(title: WordBank.topicTitle(topic, for: language), isSelected: topicFilter == topic) {
-                            topicFilter = topic
-                        }
+            if let expandedPicker {
+                customPicker(for: expandedPicker)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            HStack {
+                Text(language.text(ru: "Найдено", en: "Showing"))
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.56))
+
+                Text("\(filteredWords.count)")
+                    .font(.system(size: 14, weight: .black, design: .rounded))
+
+                Spacer()
+
+                if levelFilter != nil || topicFilter != nil {
+                    Text(language.text(ru: "Фильтр включен", en: "Filtered"))
+                        .font(.system(size: 12, weight: .black, design: .rounded))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(AtlasColors.mint.opacity(0.72)))
+                }
+            }
+        }
+        .padding(11)
+        .background(AtlasColors.mint.opacity(0.34))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(AtlasColors.line, lineWidth: 2)
+        )
+        .atlasMotion(expandedPicker)
+    }
+
+    private func filterSelector(
+        kind: WordBankPickerKind,
+        icon: String,
+        title: String,
+        value: String
+    ) -> some View {
+        let isExpanded = expandedPicker == kind
+
+        return Button {
+            AtlasHaptics.selection()
+            withAnimation(.atlasSpring) {
+                expandedPicker = isExpanded ? nil : kind
+            }
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .black))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.56))
+                    Text(value)
+                        .font(.system(size: 14, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.76)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .black))
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+            }
+            .foregroundStyle(.black)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(AtlasColors.line, lineWidth: 2)
+            )
+            .shadow(color: isExpanded ? AtlasColors.line.opacity(0.85) : .clear, radius: 0, y: 3)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func customPicker(for kind: WordBankPickerKind) -> some View {
+        switch kind {
+        case .level:
+            VStack(spacing: 8) {
+                pickerRow(
+                    title: language.text(ru: "Все уровни", en: "All levels"),
+                    subtitle: language.text(ru: "Показать A1-C2", en: "Show A1-C2"),
+                    isSelected: levelFilter == nil
+                ) {
+                    levelFilter = nil
+                    expandedPicker = nil
+                }
+
+                ForEach(LearningLevel.allCases) { level in
+                    pickerRow(
+                        title: "\(level.tag) · \(level.title(for: language))",
+                        subtitle: level.shortCanDoRU,
+                        isSelected: levelFilter == level
+                    ) {
+                        levelFilter = level
+                        expandedPicker = nil
                     }
                 }
-                .padding(.horizontal, 1)
             }
+            .padding(10)
+            .customDropdownSurface()
+
+        case .topic:
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                pickerChip(
+                    title: language.text(ru: "Все темы", en: "All topics"),
+                    icon: "square.grid.2x2",
+                    isSelected: topicFilter == nil
+                ) {
+                    topicFilter = nil
+                    expandedPicker = nil
+                }
+
+                ForEach(WordBank.topics, id: \.self) { topic in
+                    pickerChip(
+                        title: WordBank.topicTitle(topic, for: language),
+                        icon: topicIcon(topic),
+                        isSelected: topicFilter == topic
+                    ) {
+                        topicFilter = topic
+                        expandedPicker = nil
+                    }
+                }
+            }
+            .padding(10)
+            .customDropdownSurface()
         }
     }
 
-    private func chip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func pickerRow(
+        title: String,
+        subtitle: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
         Button {
             AtlasHaptics.selection()
             withAnimation(.atlasSpring) {
                 action()
             }
         } label: {
-            Text(title)
-                .font(.system(size: 13, weight: .black, design: .rounded))
-                .foregroundStyle(isSelected ? .white : .black)
-                .padding(.horizontal, 12)
-                .frame(height: 34)
-                .background(Capsule().fill(isSelected ? AtlasColors.ink : .white))
-                .overlay(Capsule().stroke(AtlasColors.line, lineWidth: 1.6))
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 19, weight: .black))
+                    .foregroundStyle(.black)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .black, design: .rounded))
+                        .foregroundStyle(.black)
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.56))
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+            .background(isSelected ? AtlasColors.mint.opacity(0.62) : .white)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(.black.opacity(isSelected ? 0.86 : 0.2), lineWidth: isSelected ? 1.8 : 1.2)
+            )
         }
         .buttonStyle(.plain)
+    }
+
+    private func pickerChip(
+        title: String,
+        icon: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            AtlasHaptics.selection()
+            withAnimation(.atlasSpring) {
+                action()
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .black))
+
+                Text(title)
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.black)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(isSelected ? AtlasColors.mint.opacity(0.72) : .white)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(.black.opacity(isSelected ? 0.86 : 0.2), lineWidth: isSelected ? 1.8 : 1.2)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func topicIcon(_ topic: String) -> String {
+        switch topic {
+        case "Everyday": "house"
+        case "Work": "briefcase"
+        case "Study": "book.closed"
+        case "Emotions": "heart"
+        case "Travel": "map"
+        case "Business": "chart.line.uptrend.xyaxis"
+        case "Health": "cross.case"
+        case "Tech": "cpu"
+        case "Culture": "theatermasks"
+        case "Nature": "leaf"
+        default: "square.grid.2x2"
+        }
+    }
+}
+
+private extension View {
+    func customDropdownSurface() -> some View {
+        background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(AtlasColors.line, lineWidth: 2)
+            )
+            .shadow(color: AtlasColors.line, radius: 0, y: 4)
     }
 }
 

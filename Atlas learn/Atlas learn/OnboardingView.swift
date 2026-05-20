@@ -26,8 +26,12 @@ struct OnboardingView: View {
     }
 
     private var currentQuizWord: WordEntry {
-        let levelWords = WordBank.all.filter { $0.level == currentAssessmentLevel && !askedWordIDs.contains($0.id) }
-        let fallback = WordBank.all.filter { $0.level == currentAssessmentLevel }
+        let levelWords = WordBank.all.filter {
+            $0.level == currentAssessmentLevel &&
+                !askedWordIDs.contains($0.id) &&
+                WordBank.isAssessmentReady($0)
+        }
+        let fallback = WordBank.all.filter { $0.level == currentAssessmentLevel && WordBank.isAssessmentReady($0) }
         return WordBank.rotated(levelWords.isEmpty ? fallback : levelWords, seed: adaptiveScore + quizIndex * 13).first
             ?? WordBank.assessmentWords.first
             ?? WordBank.all[0]
@@ -90,12 +94,13 @@ struct OnboardingView: View {
                         .fill(.black.opacity(0.08))
 
                     Capsule()
-                        .fill(AtlasColors.green)
+                        .fill(.black)
                         .frame(width: proxy.size.width * CGFloat(min(Double(page + 1) / 6.0, 1)))
                 }
             }
             .frame(height: 8)
         }
+        .foregroundStyle(.black)
         .padding(.horizontal, AtlasLayout.screenPadding)
         .padding(.top, 14)
         .padding(.bottom, 8)
@@ -380,12 +385,16 @@ struct OnboardingView: View {
         } label: {
             Text(title)
                 .font(.system(size: 17, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(.black)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
-                .background(AtlasColors.ink)
+                .background(AtlasColors.mint)
                 .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
-                .shadow(color: .black.opacity(0.35), radius: 0, y: 5)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 21, style: .continuous)
+                        .stroke(AtlasColors.line, lineWidth: 2)
+                )
+                .shadow(color: AtlasColors.line, radius: 0, y: 5)
         }
         .buttonStyle(.plain)
         .padding(.top, 6)

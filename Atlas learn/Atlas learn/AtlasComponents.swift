@@ -111,7 +111,7 @@ struct OutlineButton: View {
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 19, weight: .bold))
-                    .foregroundStyle(isSelected ? AtlasColors.green : .black.opacity(0.28))
+                    .foregroundStyle(isSelected ? .black : .black.opacity(0.28))
             }
             .padding(.horizontal, 15)
             .padding(.vertical, 13)
@@ -195,11 +195,11 @@ struct CapsuleMetric: View {
             Text(title)
                 .font(.system(size: 13, weight: .bold))
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.black)
         .padding(.horizontal, 11)
         .padding(.vertical, 7)
-        .background(Capsule().fill(Color.white.opacity(0.08)))
-        .overlay(Capsule().stroke(Color.white.opacity(0.13), lineWidth: 1))
+        .background(Capsule().fill(Color.white.opacity(0.72)))
+        .overlay(Capsule().stroke(.black.opacity(0.82), lineWidth: 1.6))
     }
 }
 
