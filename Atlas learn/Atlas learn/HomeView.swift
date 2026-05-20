@@ -49,6 +49,8 @@ struct HomeView: View {
             wordPager
                 .ignoresSafeArea(.container, edges: .vertical)
 
+            edgeObscuration
+
             VStack(spacing: 0) {
                 topBar
 
@@ -90,9 +92,39 @@ struct HomeView: View {
         }
     }
 
+    private var edgeObscuration: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                stops: [
+                    .init(color: AtlasColors.ink, location: 0),
+                    .init(color: AtlasColors.ink, location: 0.68),
+                    .init(color: AtlasColors.ink.opacity(0), location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 220)
+
+            Spacer()
+
+            LinearGradient(
+                stops: [
+                    .init(color: AtlasColors.ink.opacity(0), location: 0),
+                    .init(color: AtlasColors.ink, location: 0.48),
+                    .init(color: AtlasColors.ink, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 150)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
     private var topBar: some View {
         HStack {
-            CircleIconButton(systemName: "person", size: 56) {
+            homeIconButton(systemName: "person", size: 56) {
                 showsProfile = true
             }
 
@@ -120,13 +152,13 @@ struct HomeView: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 15)
             .frame(height: 44)
-            .background(Capsule().fill(Color.black.opacity(0.16)))
+            .background(Capsule().fill(AtlasColors.deepInk))
             .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
             .shadow(color: .black.opacity(0.22), radius: 14, y: 10)
 
             Spacer()
 
-            CircleIconButton(systemName: "crown", size: 56) {
+            homeIconButton(systemName: "crown", size: 56) {
                 showsProfile = true
             }
         }
@@ -215,16 +247,16 @@ struct HomeView: View {
 
     private func actionRow(for word: WordEntry) -> some View {
         HStack(spacing: 34) {
-            CircleIconButton(systemName: "info", size: 48) {
+            homeIconButton(systemName: "info", size: 48) {
                 selectedInfoWord = word
             }
 
-            CircleIconButton(systemName: "square.and.arrow.up", size: 48) {
+            homeIconButton(systemName: "square.and.arrow.up", size: 48) {
                 profile.markCompleted(word.id)
                 nextWord(triggerHaptic: false)
             }
 
-            CircleIconButton(
+            homeIconButton(
                 systemName: profile.favoriteWordIDs.contains(word.id) ? "heart.fill" : "heart",
                 foreground: profile.favoriteWordIDs.contains(word.id) ? AtlasColors.coral : .white,
                 size: 48
@@ -232,7 +264,7 @@ struct HomeView: View {
                 profile.toggleFavorite(word.id)
             }
 
-            CircleIconButton(
+            homeIconButton(
                 systemName: profile.savedWordIDs.contains(word.id) ? "bookmark.fill" : "bookmark",
                 size: 48
             ) {
@@ -244,7 +276,7 @@ struct HomeView: View {
 
     private var bottomNavigation: some View {
         HStack {
-            CircleIconButton(systemName: "square.grid.2x2", size: 56) {
+            homeIconButton(systemName: "square.grid.2x2", size: 56) {
                 showsWordBank = true
             }
 
@@ -263,7 +295,7 @@ struct HomeView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 20)
                 .frame(height: 54)
-                .background(Capsule().fill(Color.black.opacity(0.16)))
+                .background(Capsule().fill(AtlasColors.deepInk))
                 .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1.2))
                 .shadow(color: .black.opacity(0.24), radius: 14, y: 10)
             }
@@ -271,10 +303,26 @@ struct HomeView: View {
 
             Spacer()
 
-            CircleIconButton(systemName: "chart.bar", size: 56) {
+            homeIconButton(systemName: "chart.bar", size: 56) {
                 showsStats = true
             }
         }
+    }
+
+    private func homeIconButton(
+        systemName: String,
+        foreground: Color = .white,
+        size: CGFloat = 52,
+        action: @escaping () -> Void
+    ) -> some View {
+        CircleIconButton(
+            systemName: systemName,
+            foreground: foreground,
+            fill: AtlasColors.deepInk,
+            border: Color.white.opacity(0.16),
+            size: size,
+            action: action
+        )
     }
 
     private func nextWord(triggerHaptic: Bool = true) {
