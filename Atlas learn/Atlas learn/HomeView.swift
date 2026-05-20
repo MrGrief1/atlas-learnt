@@ -107,7 +107,7 @@ struct HomeView: View {
         }
         .sheet(item: $selectedInfoWord) { word in
             WordInfoView(word: word, language: profile.appLanguage)
-                .presentationDetents([.medium])
+                .presentationDetents([.large])
         }
     }
 
@@ -281,8 +281,10 @@ struct HomeView: View {
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.68))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .minimumScaleFactor(0.82)
+
+                ExampleStatusPill(status: exampleStatus(for: word), language: profile.appLanguage)
             }
             .padding(.horizontal, 4)
         }
@@ -319,7 +321,19 @@ struct HomeView: View {
     }
 
     private func displayedExample(for word: WordEntry) -> GeneratedWordExample {
-        generatedExamples[word.id] ?? GeneratedWordExample(english: word.exampleEN, russian: word.exampleRU)
+        generatedExamples[word.id] ?? AtlasExampleGenerator.fallbackExample(for: word)
+    }
+
+    private func exampleStatus(for word: WordEntry) -> ExampleDisplayStatus {
+        if generatedExamples[word.id] != nil {
+            return .generated
+        }
+
+        if generatingExampleIDs.contains(word.id) {
+            return .generating
+        }
+
+        return .local
     }
 
     private func generateExampleIfNeeded(for word: WordEntry) async {
@@ -468,34 +482,53 @@ struct WordInfoView: View {
     let word: WordEntry
     let language: AppLanguage
 
+    @State private var generatedExample: GeneratedWordExample?
+    @State private var isGeneratingExample = false
+
+    private var example: GeneratedWordExample {
+        generatedExample ?? AtlasExampleGenerator.fallbackExample(for: word)
+    }
+
+    private var exampleStatus: ExampleDisplayStatus {
+        if generatedExample != nil { return .generated }
+        if isGeneratingExample { return .generating }
+        return .local
+    }
+
     var body: some View {
         ZStack {
             AtlasColors.paper.ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 18) {
-                CapsuleMetric(icon: "graduationcap", title: "\(word.level.tag) \(word.level.title(for: language))")
-                    .foregroundStyle(.black)
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    CapsuleMetric(icon: "graduationcap", title: "\(word.level.tag) \(word.level.title(for: language))")
+                        .foregroundStyle(.black)
 
-                Text(word.english)
-                    .font(.system(size: 38, weight: .black, design: .serif))
+                    Text(word.english)
+                        .font(.system(size: 38, weight: .black, design: .serif))
 
-                Text(word.russian)
-                    .font(.system(size: 23, weight: .black, design: .rounded))
+                    Text(word.russian)
+                        .font(.system(size: 23, weight: .black, design: .rounded))
 
-                Text(word.definition(for: language))
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
-                    .lineSpacing(4)
+                    Text(word.definition(for: language))
+                        .font(.system(size: 17, weight: .medium, design: .rounded))
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Divider()
+                    Divider()
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(word.exampleEN)
-                        .font(.system(size: 17, weight: .black, design: .rounded))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(example.english)
+                            .font(.system(size: 17, weight: .black, design: .rounded))
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    Text(word.exampleRU)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.black.opacity(0.68))
-                }
+                        Text(example.russian)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.black.opacity(0.68))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        ExampleStatusPill(status: exampleStatus, language: language)
+                    }
                     .lineSpacing(4)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -506,11 +539,22 @@ struct WordInfoView: View {
                             .stroke(AtlasColors.line, lineWidth: 2)
                     )
 
-                Spacer()
+                    Spacer(minLength: 12)
+                }
+                .foregroundStyle(.black)
+                .padding(.horizontal, AtlasLayout.screenPadding)
+                .padding(.vertical, 20)
             }
-            .foregroundStyle(.black)
-            .padding(.horizontal, AtlasLayout.screenPadding)
-            .padding(.vertical, 20)
         }
+        .task(id: word.id) {
+            await generateExampleIfNeeded()
+        }
+    }
+
+    private func generateExampleIfNeeded() async {
+        guard AtlasExampleGenerator.isAvailable, generatedExample == nil, !isGeneratingExample else { return }
+        isGeneratingExample = true
+        defer { isGeneratingExample = false }
+        generatedExample = await AtlasExampleGenerator.generateExample(for: word)
     }
 }

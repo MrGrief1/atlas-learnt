@@ -20,23 +20,29 @@ struct PracticeView: View {
     @State private var isFinished = false
     @State private var hasStartedCurrentWord = false
     @StateObject private var speech = AtlasSpeechRecognition()
+    @State private var generatedExamples: [WordEntry.ID: GeneratedWordExample] = [:]
+    @State private var generatingExampleIDs: Set<WordEntry.ID> = []
 
-    private var practiceWords: [WordEntry] {
+    private var lessonWord: WordEntry {
         let source = words.isEmpty ? Array(profile.dailyWords.prefix(max(profile.dailyGoal, 7))) : words
         let fallback = source.isEmpty ? Array(WordBank.all.prefix(max(profile.dailyGoal, 7))) : source
         let uniqueWords = fallback.uniquedByID()
 
         if let startWordID {
             if let selected = uniqueWords.first(where: { $0.id == startWordID }) {
-                return [selected]
+                return selected
             }
 
             if let selected = WordBank.all.first(where: { $0.id == startWordID }) {
-                return [selected]
+                return selected
             }
         }
 
-        return Array(uniqueWords.prefix(1))
+        return uniqueWords.first ?? WordBank.all[0]
+    }
+
+    private var practiceWords: [WordEntry] {
+        [lessonWord]
     }
 
     private var currentWord: WordEntry {
@@ -46,6 +52,22 @@ struct PracticeView: View {
         }
 
         return practiceWords.first ?? WordBank.all[0]
+    }
+
+    private var currentExample: GeneratedWordExample {
+        generatedExamples[currentWord.id] ?? AtlasExampleGenerator.fallbackExample(for: currentWord)
+    }
+
+    private var currentExampleStatus: ExampleDisplayStatus {
+        if generatedExamples[currentWord.id] != nil {
+            return .generated
+        }
+
+        if generatingExampleIDs.contains(currentWord.id) {
+            return .generating
+        }
+
+        return .local
     }
 
     private var language: AppLanguage {
@@ -90,6 +112,9 @@ struct PracticeView: View {
         }
         .onChange(of: currentStep) { _, _ in
             prepareCurrentStep()
+        }
+        .task(id: lessonWord.id) {
+            await generateExampleIfNeeded(for: lessonWord)
         }
         .atlasMotion(currentWord.id)
         .atlasMotion(currentStep)
@@ -139,6 +164,8 @@ struct PracticeView: View {
                             word: currentWord,
                             language: language,
                             mastery: profile.wordProgress[currentWord.id]?.mastery ?? 0,
+                            example: currentExample,
+                            exampleStatus: currentExampleStatus,
                             speak: speakWord,
                             start: startWordQuestions
                         )
@@ -174,7 +201,7 @@ struct PracticeView: View {
         case .ruToEnglishTiles:
             TileExerciseView(
                 title: currentStep.title(for: language),
-                prompt: currentWord.exampleRU,
+                prompt: currentExample.russian,
                 helper: language.text(ru: "Собери английскую фразу. Целевое слово должно оказаться внутри ответа.", en: "Build the English phrase. The target word belongs inside the answer."),
                 selectedTiles: selectedTiles,
                 remainingTiles: remainingTiles,
@@ -198,9 +225,9 @@ struct PracticeView: View {
         case .clozeWord:
             ChoiceExerciseView(
                 title: currentStep.title(for: language),
-                prompt: currentWord.clozeSentence,
+                prompt: lessonClozeSentence(for: currentWord),
                 focusText: "____",
-                detail: currentWord.exampleRU,
+                detail: currentExample.russian,
                 choices: WordBank.clozeChoices(for: currentWord),
                 correctAnswer: currentWord.english,
                 selectedChoice: selectedChoice,
@@ -210,7 +237,7 @@ struct PracticeView: View {
         case .wordOrder:
             TileExerciseView(
                 title: currentStep.title(for: language),
-                prompt: currentWord.exampleRU,
+                prompt: currentExample.russian,
                 helper: language.text(ru: "Поставь все слова в естественном английском порядке.", en: "Put every word into natural English order."),
                 selectedTiles: selectedTiles,
                 remainingTiles: remainingTiles,
@@ -226,6 +253,7 @@ struct PracticeView: View {
                 target: speechTarget,
                 speech: speech,
                 isLocked: feedback != nil,
+                example: currentExample.english,
                 playAction: speakWord,
                 recordAction: startSpeechAttempt,
                 stopAction: stopSpeechAttempt
@@ -272,7 +300,7 @@ struct PracticeView: View {
     private func startSessionIfNeeded() {
         guard session.wordIDs.isEmpty else { return }
 
-        session = PracticeSession(words: practiceWords, startWordID: startWordID)
+        session = PracticeSession(words: [lessonWord], startWordID: lessonWord.id)
         prepareCurrentStep()
     }
 
@@ -291,7 +319,7 @@ struct PracticeView: View {
         speech.reset()
 
         if isTileStep(currentStep) {
-            remainingTiles = WordBank.sentenceTiles(for: currentWord)
+            remainingTiles = lessonSentenceTiles(for: currentWord)
         } else {
             remainingTiles = []
         }
@@ -310,7 +338,7 @@ struct PracticeView: View {
 
     private func speakSentence() {
         AtlasHaptics.tap()
-        AtlasSpeech.speak(WordBank.sentenceAnswer(for: currentWord), voice: profile.selectedSpeechVoice)
+        AtlasSpeech.speak(lessonSentenceAnswer(for: currentWord), voice: profile.selectedSpeechVoice)
     }
 
     private func selectChoice(_ choice: String, correctAnswer: String) {
@@ -346,7 +374,7 @@ struct PracticeView: View {
         AtlasHaptics.tap()
         withAnimation(.atlasSpring) {
             selectedTiles = []
-            remainingTiles = WordBank.sentenceTiles(for: currentWord)
+            remainingTiles = lessonSentenceTiles(for: currentWord)
         }
     }
 
@@ -368,11 +396,55 @@ struct PracticeView: View {
             break
         case .ruToEnglishTiles, .listenTiles, .wordOrder:
             let answer = selectedTiles.joined(separator: " ")
-            let correct = WordBank.sentenceAnswer(for: currentWord)
+            let correct = lessonSentenceAnswer(for: currentWord)
             commitStep(isCorrect: normalized(answer) == normalized(correct), detail: correct)
         case .speechRepeat:
             let result = evaluateSpeechAnswer()
             commitStep(isCorrect: result.isCorrect, detail: result.detail)
+        }
+    }
+
+    private func lessonSentenceTiles(for word: WordEntry) -> [String] {
+        if generatedExamples[word.id] == nil {
+            return WordBank.sentenceTiles(for: word)
+        }
+
+        let tiles = currentExample.sentenceTiles
+        guard tiles.count > 1 else { return tiles }
+        let rawOffset = word.id.unicodeScalars.reduce(0) { $0 + Int($1.value) } % tiles.count
+        let offset = rawOffset == 0 ? 1 : rawOffset
+        return Array(tiles[offset...]) + Array(tiles[..<offset])
+    }
+
+    private func lessonSentenceAnswer(for word: WordEntry) -> String {
+        if generatedExamples[word.id] == nil {
+            return WordBank.sentenceAnswer(for: word)
+        }
+
+        return currentExample.sentenceTiles.joined(separator: " ")
+    }
+
+    private func lessonClozeSentence(for word: WordEntry) -> String {
+        if generatedExamples[word.id] == nil {
+            return word.clozeSentence
+        }
+
+        return currentExample.clozeSentence(targetWord: word.english)
+    }
+
+    private func generateExampleIfNeeded(for word: WordEntry) async {
+        guard AtlasExampleGenerator.isAvailable else { return }
+        guard generatedExamples[word.id] == nil, !generatingExampleIDs.contains(word.id) else { return }
+
+        generatingExampleIDs.insert(word.id)
+        defer { generatingExampleIDs.remove(word.id) }
+
+        guard let generated = await AtlasExampleGenerator.generateExample(for: word) else { return }
+        generatedExamples[word.id] = generated
+
+        if isTileStep(currentStep), feedback == nil {
+            selectedTiles = []
+            remainingTiles = lessonSentenceTiles(for: word)
         }
     }
 
@@ -637,6 +709,8 @@ private struct StartWordCard: View {
     let word: WordEntry
     let language: AppLanguage
     let mastery: Int
+    let example: GeneratedWordExample
+    let exampleStatus: ExampleDisplayStatus
     let speak: () -> Void
     let start: () -> Void
 
@@ -681,8 +755,10 @@ private struct StartWordCard: View {
 
             ExampleCard(
                 title: language.text(ru: "Контекст", en: "Context"),
-                text: "\(word.exampleEN)\n\(word.exampleRU)"
+                text: "\(example.english)\n\(example.russian)"
             )
+
+            ExampleStatusPill(status: exampleStatus, language: language)
 
             if !word.collocations.isEmpty || !word.hints.isEmpty {
                 FlexibleChipWrap(items: Array((word.collocations + word.hints).prefix(6)))
@@ -742,7 +818,7 @@ private struct ChoiceExerciseView: View {
             Text(detail)
                 .font(.system(size: 13, weight: .bold, design: .rounded))
                 .foregroundStyle(.black.opacity(0.58))
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 10) {
                 ForEach(choices, id: \.self) { choice in
@@ -851,6 +927,7 @@ private struct SpeechRepeatChallenge: View {
     let target: String
     @ObservedObject var speech: AtlasSpeechRecognition
     let isLocked: Bool
+    let example: String
     let playAction: () -> Void
     let recordAction: () -> Void
     let stopAction: () -> Void
@@ -869,10 +946,10 @@ private struct SpeechRepeatChallenge: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.58)
 
-                    Text(word.exampleEN)
+                    Text(example)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(.black.opacity(0.58))
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
@@ -1155,7 +1232,7 @@ private struct FeedbackPanel: View {
                     Text(feedback.detail)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(.black.opacity(0.68))
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()

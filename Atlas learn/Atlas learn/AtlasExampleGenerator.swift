@@ -12,6 +12,14 @@ import FoundationModels
 struct GeneratedWordExample: Equatable {
     let english: String
     let russian: String
+
+    var sentenceTiles: [String] {
+        english.atlasSentenceTiles
+    }
+
+    func clozeSentence(targetWord: String) -> String {
+        english.atlasClozeSentence(targetWord: targetWord)
+    }
 }
 
 enum AtlasExampleGenerator {
@@ -33,6 +41,10 @@ enum AtlasExampleGenerator {
         #endif
 
         return nil
+    }
+
+    static func fallbackExample(for word: WordEntry) -> GeneratedWordExample {
+        GeneratedWordExample(english: word.exampleEN, russian: word.exampleRU)
     }
 }
 
@@ -120,3 +132,24 @@ private enum FoundationModelExampleGenerator {
     }
 }
 #endif
+
+private extension String {
+    var atlasSentenceTiles: [String] {
+        let pattern = #"[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return split(separator: " ").map(String.init)
+        }
+
+        let range = NSRange(startIndex..., in: self)
+        return regex.matches(in: self, range: range).compactMap { match in
+            guard let range = Range(match.range, in: self) else { return nil }
+            return String(self[range])
+        }
+    }
+
+    func atlasClozeSentence(targetWord: String) -> String {
+        let escaped = NSRegularExpression.escapedPattern(for: targetWord)
+        let pattern = #"(?i)(?<![A-Za-z])"# + escaped + #"(?![A-Za-z])"#
+        return replacingOccurrences(of: pattern, with: "____", options: .regularExpression)
+    }
+}

@@ -702,7 +702,7 @@ struct WordBankRow: View {
                 Text(word.exampleEN)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.black.opacity(0.6))
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button {
                     AtlasHaptics.tap()

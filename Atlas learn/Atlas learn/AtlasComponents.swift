@@ -56,6 +56,51 @@ struct CircleIconButton: View {
     }
 }
 
+enum ExampleDisplayStatus {
+    case generated
+    case generating
+    case local
+
+    var icon: String {
+        switch self {
+        case .generated, .generating:
+            "sparkles"
+        case .local:
+            "text.book.closed"
+        }
+    }
+
+    func title(for language: AppLanguage) -> String {
+        switch self {
+        case .generated:
+            "AI"
+        case .generating:
+            "AI..."
+        case .local:
+            language.text(ru: "локально", en: "local")
+        }
+    }
+}
+
+struct ExampleStatusPill: View {
+    let status: ExampleDisplayStatus
+    let language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: status.icon)
+                .font(.system(size: 10, weight: .black))
+            Text(status.title(for: language))
+                .font(.system(size: 10, weight: .black, design: .rounded))
+        }
+        .foregroundStyle(.black.opacity(0.72))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(Color.white.opacity(0.78)))
+        .overlay(Capsule().stroke(.black.opacity(0.16), lineWidth: 1))
+    }
+}
+
 struct PaperIconButton: View {
     let systemName: String
     var action: () -> Void
