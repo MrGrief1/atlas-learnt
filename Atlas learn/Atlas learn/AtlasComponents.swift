@@ -21,6 +21,7 @@ enum AtlasLayout {
     static let screenPadding: CGFloat = 26
     static let modalPadding: CGFloat = 20
     static let scrollShadowPadding: CGFloat = 6
+    static let scrollTopInset: CGFloat = 8
 }
 
 struct CircleIconButton: View {

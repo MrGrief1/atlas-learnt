@@ -116,6 +116,7 @@ struct WordBankView: View {
                         }
                     }
                     .padding(.horizontal, AtlasLayout.scrollShadowPadding)
+                    .padding(.top, AtlasLayout.scrollTopInset)
                     .padding(.bottom, 24)
                 }
             }
