@@ -72,9 +72,6 @@ struct ProfileView: View {
         }
         .atlasSoftMotion(profile.appLanguage)
         .atlasMotion(profile.dailyGoal)
-        .onChange(of: profile.appLanguage) { _, _ in
-            AtlasHaptics.selection()
-        }
         .sheet(isPresented: $showsVoicePicker) {
             VoicePickerView(profile: $profile)
         }
@@ -214,13 +211,12 @@ struct ProfileView: View {
                     .font(.system(size: 24, weight: .bold))
             }
 
-            Picker("", selection: $profile.appLanguage) {
-                ForEach(AppLanguage.allCases) { language in
-                    Text(language.nativeTitle)
-                        .tag(language)
-                }
+            AtlasSegmentedPicker(
+                options: AppLanguage.allCases,
+                selection: $profile.appLanguage
+            ) { language in
+                language.nativeTitle
             }
-            .pickerStyle(.segmented)
         }
         .padding(15)
         .foregroundStyle(.black)

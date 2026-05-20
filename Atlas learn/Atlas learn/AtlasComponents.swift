@@ -127,6 +127,62 @@ struct OutlineButton: View {
     }
 }
 
+struct AtlasSegmentedPicker<Option: Hashable & Identifiable>: View {
+    let options: [Option]
+    @Binding var selection: Option
+    let title: (Option) -> String
+
+    @Namespace private var selectionNamespace
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(options) { option in
+                let isSelected = option == selection
+
+                Button {
+                    guard selection != option else { return }
+                    AtlasHaptics.selection()
+                    withAnimation(.atlasSpring) {
+                        selection = option
+                    }
+                } label: {
+                    Text(title(option))
+                        .font(.system(size: 15, weight: .black, design: .rounded))
+                        .foregroundStyle(isSelected ? .black : .black.opacity(0.62))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                    .fill(.white)
+                                    .matchedGeometryEffect(id: "atlas-segment", in: selectionNamespace)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                            .stroke(.black.opacity(0.84), lineWidth: 2)
+                                    )
+                                    .shadow(color: .black.opacity(0.38), radius: 0, y: 3)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(5)
+        .background(
+            RoundedRectangle(cornerRadius: 21, style: .continuous)
+                .fill(AtlasColors.mint.opacity(0.34))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 21, style: .continuous)
+                .stroke(.black.opacity(0.76), lineWidth: 2.2)
+        )
+        .shadow(color: .black.opacity(0.42), radius: 0, y: 4)
+        .atlasMotion(selection)
+    }
+}
+
 struct CapsuleMetric: View {
     let icon: String
     let title: String

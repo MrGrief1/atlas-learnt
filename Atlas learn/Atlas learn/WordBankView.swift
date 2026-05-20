@@ -101,13 +101,12 @@ struct WordBankView: View {
                         .stroke(.black, lineWidth: 2)
                 )
 
-                Picker("", selection: $filter) {
-                    ForEach(WordBankFilter.allCases) { filter in
-                        Text(filter.title(for: language))
-                            .tag(filter)
-                    }
+                AtlasSegmentedPicker(
+                    options: WordBankFilter.allCases,
+                    selection: $filter
+                ) { filter in
+                    filter.title(for: language)
                 }
-                .pickerStyle(.segmented)
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 14) {
@@ -127,9 +126,6 @@ struct WordBankView: View {
         .atlasMotion(filter)
         .atlasSoftMotion(searchText)
         .atlasSoftMotion(profile)
-        .onChange(of: filter) { _, _ in
-            AtlasHaptics.selection()
-        }
     }
 }
 
