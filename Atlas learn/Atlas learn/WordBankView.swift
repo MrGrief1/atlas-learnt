@@ -166,6 +166,14 @@ struct WordBankRow: View {
 
             VStack(spacing: 10) {
                 Button {
+                    AtlasHaptics.tap()
+                    AtlasSpeech.speak(word.english, voice: profile.selectedSpeechVoice)
+                } label: {
+                    Image(systemName: "speaker.wave.2")
+                        .font(.system(size: 18, weight: .bold))
+                }
+
+                Button {
                     AtlasHaptics.selection()
                     withAnimation(.atlasSpring) {
                         profile.toggleSaved(word.id)

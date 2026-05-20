@@ -11,11 +11,12 @@ struct HomeView: View {
     let resetOnboarding: () -> Void
 
     @State private var currentIndex = 0
+    @State private var selectedWordID: WordEntry.ID?
     @State private var showsProfile = false
     @State private var showsPractice = false
     @State private var showsWordBank = false
     @State private var showsStats = false
-    @State private var showsInfo = false
+    @State private var selectedInfoWord: WordEntry?
 
     private var dailyWords: [WordEntry] {
         profile.dailyWords
@@ -23,7 +24,17 @@ struct HomeView: View {
 
     private var currentWord: WordEntry {
         guard !dailyWords.isEmpty else { return WordBank.all[0] }
+
+        if let selectedWordID,
+           let selectedWord = dailyWords.first(where: { $0.id == selectedWordID }) {
+            return selectedWord
+        }
+
         return dailyWords[min(currentIndex, dailyWords.count - 1)]
+    }
+
+    private var dailyWordIDs: [WordEntry.ID] {
+        dailyWords.map(\.id)
     }
 
     private var progressValue: Double {
@@ -35,20 +46,13 @@ struct HomeView: View {
             AtlasColors.ink
                 .ignoresSafeArea()
 
+            wordPager
+                .ignoresSafeArea(.container, edges: .vertical)
+
             VStack(spacing: 0) {
                 topBar
 
-                Spacer(minLength: 72)
-
-                wordCard
-                    .id(currentWord.id)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-
-                Spacer(minLength: 48)
-
-                actionRow
-
-                Spacer(minLength: 28)
+                Spacer()
 
                 bottomNavigation
             }
@@ -56,16 +60,10 @@ struct HomeView: View {
             .padding(.top, 16)
             .padding(.bottom, 18)
         }
-        .gesture(
-            DragGesture(minimumDistance: 26)
-                .onEnded { value in
-                    if value.translation.height < -24 || value.translation.width < -40 {
-                        nextWord()
-                    } else if value.translation.width > 40 {
-                        previousWord()
-                    }
-                }
-        )
+        .onAppear(perform: alignSelectedWord)
+        .onChange(of: dailyWordIDs) { _, _ in
+            alignSelectedWord()
+        }
         .atlasMotion(currentWord.id)
         .atlasSoftMotion(profile)
         .sheet(isPresented: $showsProfile) {
@@ -86,8 +84,8 @@ struct HomeView: View {
         .sheet(isPresented: $showsStats) {
             StatsView(profile: profile)
         }
-        .sheet(isPresented: $showsInfo) {
-            WordInfoView(word: currentWord, language: profile.appLanguage)
+        .sheet(item: $selectedInfoWord) { word in
+            WordInfoView(word: word, language: profile.appLanguage)
                 .presentationDetents([.medium])
         }
     }
@@ -134,20 +132,54 @@ struct HomeView: View {
         }
     }
 
-    private var wordCard: some View {
+    private var wordPager: some View {
+        GeometryReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    ForEach(dailyWords) { word in
+                        wordPage(for: word, in: proxy.size)
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .id(word.id)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .contentMargins(.vertical, 0, for: .scrollContent)
+            .scrollPosition(id: $selectedWordID)
+            .onChange(of: selectedWordID) { _, newID in
+                syncSelectedWord(newID, feedback: true)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func wordPage(for word: WordEntry, in size: CGSize) -> some View {
+        ZStack {
+            wordCard(for: word)
+                .padding(.horizontal, 22)
+                .position(x: size.width / 2, y: size.height * 0.48)
+
+            actionRow(for: word)
+                .padding(.horizontal, 54)
+                .position(x: size.width / 2, y: size.height * 0.77)
+        }
+    }
+
+    private func wordCard(for word: WordEntry) -> some View {
         VStack(spacing: 21) {
             VStack(spacing: 10) {
-                Text(currentWord.english.lowercased())
-                    .font(.system(size: currentWord.english.count > 12 ? 46 : 56, weight: .black, design: .serif))
+                Text(word.english.lowercased())
+                    .font(.system(size: word.english.count > 12 ? 46 : 56, weight: .black, design: .serif))
                     .foregroundStyle(.white)
                     .minimumScaleFactor(0.68)
                     .lineLimit(1)
 
                 Button {
-                    speakCurrentWord()
+                    speak(word)
                 } label: {
                     HStack(spacing: 8) {
-                        Text(currentWord.ipa)
+                        Text(word.ipa)
                             .font(.system(size: 15, weight: .bold, design: .rounded))
                         Image(systemName: "speaker.wave.2")
                             .font(.system(size: 17, weight: .medium))
@@ -162,14 +194,14 @@ struct HomeView: View {
             }
 
             VStack(spacing: 10) {
-                Text("(\(currentWord.partOfSpeech).) \(currentWord.definition(for: profile.appLanguage))")
+                Text("(\(word.partOfSpeech).) \(word.definition(for: profile.appLanguage))")
                     .font(.system(size: 23, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(currentWord.russian)
+                Text(word.russian)
                     .font(.system(size: 15, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white.opacity(0.72))
                     .padding(.horizontal, 13)
@@ -181,30 +213,30 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var actionRow: some View {
+    private func actionRow(for word: WordEntry) -> some View {
         HStack(spacing: 34) {
             CircleIconButton(systemName: "info", size: 48) {
-                showsInfo = true
+                selectedInfoWord = word
             }
 
             CircleIconButton(systemName: "square.and.arrow.up", size: 48) {
-                profile.markCompleted(currentWord.id)
+                profile.markCompleted(word.id)
                 nextWord(triggerHaptic: false)
             }
 
             CircleIconButton(
-                systemName: profile.favoriteWordIDs.contains(currentWord.id) ? "heart.fill" : "heart",
-                foreground: profile.favoriteWordIDs.contains(currentWord.id) ? AtlasColors.coral : .white,
+                systemName: profile.favoriteWordIDs.contains(word.id) ? "heart.fill" : "heart",
+                foreground: profile.favoriteWordIDs.contains(word.id) ? AtlasColors.coral : .white,
                 size: 48
             ) {
-                profile.toggleFavorite(currentWord.id)
+                profile.toggleFavorite(word.id)
             }
 
             CircleIconButton(
-                systemName: profile.savedWordIDs.contains(currentWord.id) ? "bookmark.fill" : "bookmark",
+                systemName: profile.savedWordIDs.contains(word.id) ? "bookmark.fill" : "bookmark",
                 size: 48
             ) {
-                profile.toggleSaved(currentWord.id)
+                profile.toggleSaved(word.id)
             }
         }
         .frame(maxWidth: .infinity)
@@ -248,29 +280,79 @@ struct HomeView: View {
     private func nextWord(triggerHaptic: Bool = true) {
         guard !dailyWords.isEmpty else { return }
 
+        let targetIndex = min(currentIndex + 1, dailyWords.count - 1)
+        guard targetIndex != currentIndex else {
+            if triggerHaptic {
+                AtlasHaptics.impact(.soft)
+            }
+            return
+        }
+
         if triggerHaptic {
             AtlasHaptics.impact(.soft)
         }
 
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
-            currentIndex = (currentIndex + 1) % dailyWords.count
-        }
+        scrollToWord(at: targetIndex)
     }
 
-    private func speakCurrentWord() {
+    private func speak(_ word: WordEntry) {
         AtlasHaptics.tap()
-        AtlasSpeech.speak(currentWord.english)
+        AtlasSpeech.speak(word.english, voice: profile.selectedSpeechVoice)
     }
 
     private func previousWord(triggerHaptic: Bool = true) {
         guard !dailyWords.isEmpty else { return }
 
+        let targetIndex = max(currentIndex - 1, 0)
+        guard targetIndex != currentIndex else {
+            if triggerHaptic {
+                AtlasHaptics.impact(.soft)
+            }
+            return
+        }
+
         if triggerHaptic {
             AtlasHaptics.impact(.soft)
         }
 
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
-            currentIndex = (currentIndex - 1 + dailyWords.count) % dailyWords.count
+        scrollToWord(at: targetIndex)
+    }
+
+    private func scrollToWord(at index: Int) {
+        let targetIndex = max(0, min(index, dailyWords.count - 1))
+
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+            currentIndex = targetIndex
+            selectedWordID = dailyWords[targetIndex].id
+        }
+    }
+
+    private func alignSelectedWord() {
+        guard !dailyWords.isEmpty else { return }
+
+        if let selectedWordID,
+           let selectedIndex = dailyWords.firstIndex(where: { $0.id == selectedWordID }) {
+            currentIndex = selectedIndex
+        } else {
+            let safeIndex = min(currentIndex, dailyWords.count - 1)
+            currentIndex = safeIndex
+            selectedWordID = dailyWords[safeIndex].id
+        }
+    }
+
+    private func syncSelectedWord(_ wordID: WordEntry.ID?, feedback: Bool) {
+        guard
+            let wordID,
+            let selectedIndex = dailyWords.firstIndex(where: { $0.id == wordID }),
+            currentIndex != selectedIndex
+        else {
+            return
+        }
+
+        currentIndex = selectedIndex
+
+        if feedback {
+            AtlasHaptics.impact(.soft)
         }
     }
 }

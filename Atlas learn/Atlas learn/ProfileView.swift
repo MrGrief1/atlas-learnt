@@ -11,6 +11,8 @@ struct ProfileView: View {
     @Binding var profile: AtlasProfile
     let resetOnboarding: () -> Void
 
+    @State private var showsVoicePicker = false
+
     private var language: AppLanguage {
         profile.appLanguage
     }
@@ -43,10 +45,17 @@ struct ProfileView: View {
                                 title: language.text(ru: "Напоминания", en: "Reminders"),
                                 icon: "bell.badge"
                             )
-                            ProfileTile(
-                                title: language.text(ru: "Голоса", en: "Voices"),
-                                icon: "waveform"
-                            )
+                            Button {
+                                AtlasHaptics.tap()
+                                showsVoicePicker = true
+                            } label: {
+                                ProfileTile(
+                                    title: language.text(ru: "Голоса", en: "Voices"),
+                                    subtitle: profile.selectedSpeechVoice.title(for: language),
+                                    icon: "waveform"
+                                )
+                            }
+                            .buttonStyle(.plain)
                             ProfileTile(
                                 title: language.text(ru: "Виджеты", en: "Widgets"),
                                 icon: "apps.iphone"
@@ -63,6 +72,9 @@ struct ProfileView: View {
         .atlasMotion(profile.dailyGoal)
         .onChange(of: profile.appLanguage) { _, _ in
             AtlasHaptics.selection()
+        }
+        .sheet(isPresented: $showsVoicePicker) {
+            VoicePickerView(profile: $profile)
         }
     }
 
@@ -222,6 +234,7 @@ struct ProfileView: View {
 
 struct ProfileTile: View {
     let title: String
+    var subtitle: String? = nil
     let icon: String
 
     var body: some View {
@@ -236,6 +249,14 @@ struct ProfileTile: View {
                 .foregroundStyle(.black)
                 .lineLimit(2)
                 .minimumScaleFactor(0.74)
+
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.54))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
         }
         .padding(14)
         .frame(minHeight: 168, alignment: .topLeading)
@@ -246,5 +267,128 @@ struct ProfileTile: View {
                 .stroke(.black.opacity(0.72), lineWidth: 2.2)
         )
         .shadow(color: .black.opacity(0.72), radius: 0, y: 6)
+    }
+}
+
+struct VoicePickerView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var profile: AtlasProfile
+
+    private var language: AppLanguage {
+        profile.appLanguage
+    }
+
+    var body: some View {
+        ZStack {
+            AtlasColors.paper
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text(language.text(ru: "Голоса", en: "Voices"))
+                        .font(.system(size: 34, weight: .black, design: .serif))
+                        .foregroundStyle(.black)
+
+                    Spacer()
+
+                    Button {
+                        AtlasHaptics.tap()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(.black)
+                            .frame(width: 42, height: 42)
+                            .background(Circle().fill(.white))
+                            .overlay(Circle().stroke(.black, lineWidth: 2))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Text(language.text(
+                    ru: "Выбери голос для озвучки английских слов.",
+                    en: "Choose the voice for English word pronunciation."
+                ))
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(.black.opacity(0.62))
+
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 14) {
+                        ForEach(SpeechVoiceOption.allCases) { voice in
+                            VoiceOptionRow(
+                                voice: voice,
+                                isSelected: profile.selectedSpeechVoice == voice,
+                                language: language
+                            ) {
+                                AtlasHaptics.selection()
+                                withAnimation(.atlasSpring) {
+                                    profile.voiceID = voice
+                                }
+                                AtlasSpeech.speak("reticence", voice: voice)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 24)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 20)
+        }
+        .atlasMotion(profile.selectedSpeechVoice)
+    }
+}
+
+struct VoiceOptionRow: View {
+    let voice: SpeechVoiceOption
+    let isSelected: Bool
+    let language: AppLanguage
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(AtlasColors.mint.opacity(0.86))
+                        .frame(width: 58, height: 58)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(.black, lineWidth: 2)
+                        )
+                        .rotationEffect(.degrees(-4))
+
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundStyle(.black)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(voice.title(for: language))
+                        .font(.system(size: 20, weight: .black, design: .rounded))
+                        .foregroundStyle(.black)
+
+                    Text(voice.subtitle(for: language))
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(.black.opacity(0.58))
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 24, weight: .black))
+                    .foregroundStyle(isSelected ? AtlasColors.green : .black.opacity(0.34))
+            }
+            .padding(15)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 23, style: .continuous)
+                    .stroke(isSelected ? .black : .black.opacity(0.72), lineWidth: isSelected ? 2.6 : 2)
+            )
+            .shadow(color: .black.opacity(isSelected ? 0.78 : 0.58), radius: 0, y: isSelected ? 6 : 4)
+        }
+        .buttonStyle(.plain)
     }
 }

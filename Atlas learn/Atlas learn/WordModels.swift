@@ -107,6 +107,46 @@ enum LearningLevel: String, CaseIterable, Codable, Identifiable, Comparable {
     }
 }
 
+enum SpeechVoiceOption: String, CaseIterable, Codable, Identifiable {
+    case american
+    case british
+    case australian
+    case irish
+    case southAfrican
+
+    var id: String { rawValue }
+
+    var languageCode: String {
+        switch self {
+        case .american: "en-US"
+        case .british: "en-GB"
+        case .australian: "en-AU"
+        case .irish: "en-IE"
+        case .southAfrican: "en-ZA"
+        }
+    }
+
+    func title(for language: AppLanguage) -> String {
+        switch self {
+        case .american: language.text(ru: "Американский", en: "American")
+        case .british: language.text(ru: "Британский", en: "British")
+        case .australian: language.text(ru: "Австралийский", en: "Australian")
+        case .irish: language.text(ru: "Ирландский", en: "Irish")
+        case .southAfrican: language.text(ru: "Южноафриканский", en: "South African")
+        }
+    }
+
+    func subtitle(for language: AppLanguage) -> String {
+        switch self {
+        case .american: language.text(ru: "Четкое нейтральное произношение", en: "Clear neutral pronunciation")
+        case .british: language.text(ru: "Мягкий британский акцент", en: "Soft British accent")
+        case .australian: language.text(ru: "Легкий австралийский акцент", en: "Light Australian accent")
+        case .irish: language.text(ru: "Живой ирландский акцент", en: "Lively Irish accent")
+        case .southAfrican: language.text(ru: "Спокойный южноафриканский акцент", en: "Calm South African accent")
+        }
+    }
+}
+
 struct WordEntry: Codable, Hashable, Identifiable {
     let id: String
     let english: String
@@ -133,6 +173,7 @@ struct AtlasProfile: Codable, Equatable {
     var appLanguage: AppLanguage
     var level: LearningLevel
     var dailyGoal: Int
+    var voiceID: SpeechVoiceOption? = .american
     var selectedTopics: [String]
     var unknownWordIDs: [String]
     var savedWordIDs: [String]
@@ -156,6 +197,10 @@ struct AtlasProfile: Codable, Equatable {
 
     var dailyWords: [WordEntry] {
         WordBank.dailyWords(for: self)
+    }
+
+    var selectedSpeechVoice: SpeechVoiceOption {
+        voiceID ?? .american
     }
 
     mutating func toggleSaved(_ id: String) {
