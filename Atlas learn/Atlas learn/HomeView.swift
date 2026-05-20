@@ -38,23 +38,23 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 topBar
 
-                Spacer(minLength: 80)
+                Spacer(minLength: 72)
 
                 wordCard
                     .id(currentWord.id)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
 
-                Spacer(minLength: 56)
+                Spacer(minLength: 48)
 
                 actionRow
 
-                Spacer(minLength: 34)
+                Spacer(minLength: 28)
 
                 bottomNavigation
             }
-            .padding(.horizontal, 26)
-            .padding(.top, 18)
-            .padding(.bottom, 22)
+            .padding(.horizontal, 22)
+            .padding(.top, 16)
+            .padding(.bottom, 18)
         }
         .gesture(
             DragGesture(minimumDistance: 26)
@@ -94,18 +94,18 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack {
-            CircleIconButton(systemName: "person", size: 62) {
+            CircleIconButton(systemName: "person", size: 56) {
                 showsProfile = true
             }
 
             Spacer()
 
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: "bookmark")
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
 
                 Text("\(profile.completedTodayIDs.count)/\(profile.dailyGoal)")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
 
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
@@ -117,28 +117,28 @@ struct HomeView: View {
                             .frame(width: proxy.size.width * min(progressValue, 1))
                     }
                 }
-                .frame(width: 112, height: 8)
+                .frame(width: 96, height: 7)
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .frame(height: 50)
+            .padding(.horizontal, 15)
+            .frame(height: 44)
             .background(Capsule().fill(Color.black.opacity(0.16)))
             .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
             .shadow(color: .black.opacity(0.22), radius: 14, y: 10)
 
             Spacer()
 
-            CircleIconButton(systemName: "crown", size: 62) {
+            CircleIconButton(systemName: "crown", size: 56) {
                 showsProfile = true
             }
         }
     }
 
     private var wordCard: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 12) {
+        VStack(spacing: 21) {
+            VStack(spacing: 10) {
                 Text(currentWord.english.lowercased())
-                    .font(.system(size: currentWord.english.count > 12 ? 54 : 64, weight: .black, design: .serif))
+                    .font(.system(size: currentWord.english.count > 12 ? 46 : 56, weight: .black, design: .serif))
                     .foregroundStyle(.white)
                     .minimumScaleFactor(0.68)
                     .lineLimit(1)
@@ -146,34 +146,34 @@ struct HomeView: View {
                 Button {
                     nextWord()
                 } label: {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         Text(currentWord.ipa)
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
                         Image(systemName: "speaker.wave.2")
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 17, weight: .medium))
                     }
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 9)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 7)
                     .background(Capsule().fill(Color.black.opacity(0.16)))
                     .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 Text("(\(currentWord.partOfSpeech).) \(currentWord.definition(for: profile.appLanguage))")
-                    .font(.system(size: 27, weight: .semibold, design: .rounded))
+                    .font(.system(size: 23, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(5)
+                    .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(currentWord.russian)
-                    .font(.system(size: 18, weight: .heavy, design: .rounded))
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white.opacity(0.72))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 6)
                     .background(Capsule().fill(Color.white.opacity(0.08)))
             }
             .padding(.horizontal, 4)
@@ -182,12 +182,12 @@ struct HomeView: View {
     }
 
     private var actionRow: some View {
-        HStack(spacing: 42) {
-            CircleIconButton(systemName: "info", size: 54) {
+        HStack(spacing: 34) {
+            CircleIconButton(systemName: "info", size: 48) {
                 showsInfo = true
             }
 
-            CircleIconButton(systemName: "square.and.arrow.up", size: 54) {
+            CircleIconButton(systemName: "square.and.arrow.up", size: 48) {
                 profile.markCompleted(currentWord.id)
                 nextWord(triggerHaptic: false)
             }
@@ -195,14 +195,14 @@ struct HomeView: View {
             CircleIconButton(
                 systemName: profile.favoriteWordIDs.contains(currentWord.id) ? "heart.fill" : "heart",
                 foreground: profile.favoriteWordIDs.contains(currentWord.id) ? AtlasColors.coral : .white,
-                size: 54
+                size: 48
             ) {
                 profile.toggleFavorite(currentWord.id)
             }
 
             CircleIconButton(
                 systemName: profile.savedWordIDs.contains(currentWord.id) ? "bookmark.fill" : "bookmark",
-                size: 54
+                size: 48
             ) {
                 profile.toggleSaved(currentWord.id)
             }
@@ -212,7 +212,7 @@ struct HomeView: View {
 
     private var bottomNavigation: some View {
         HStack {
-            CircleIconButton(systemName: "square.grid.2x2", size: 62) {
+            CircleIconButton(systemName: "square.grid.2x2", size: 56) {
                 showsWordBank = true
             }
 
@@ -222,15 +222,15 @@ struct HomeView: View {
                 AtlasHaptics.tap()
                 showsPractice = true
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     Image(systemName: "graduationcap")
-                        .font(.system(size: 25, weight: .semibold))
+                        .font(.system(size: 21, weight: .semibold))
                     Text(profile.appLanguage.text(ru: "Тренировка", en: "Practice"))
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 24)
-                .frame(height: 62)
+                .padding(.horizontal, 20)
+                .frame(height: 54)
                 .background(Capsule().fill(Color.black.opacity(0.16)))
                 .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1.2))
                 .shadow(color: .black.opacity(0.24), radius: 14, y: 10)
@@ -239,7 +239,7 @@ struct HomeView: View {
 
             Spacer()
 
-            CircleIconButton(systemName: "chart.bar", size: 62) {
+            CircleIconButton(systemName: "chart.bar", size: 56) {
                 showsStats = true
             }
         }
@@ -283,33 +283,33 @@ struct WordInfoView: View {
                     .foregroundStyle(.black)
 
                 Text(word.english)
-                    .font(.system(size: 46, weight: .black, design: .serif))
+                    .font(.system(size: 38, weight: .black, design: .serif))
 
                 Text(word.russian)
-                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .font(.system(size: 23, weight: .black, design: .rounded))
 
                 Text(word.definition(for: language))
-                    .font(.system(size: 20, weight: .medium, design: .rounded))
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
                     .lineSpacing(4)
 
                 Divider()
 
                 Text(word.example(for: language))
-                    .font(.system(size: 19, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .lineSpacing(4)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        RoundedRectangle(cornerRadius: 19, style: .continuous)
                             .stroke(AtlasColors.line, lineWidth: 2)
                     )
 
                 Spacer()
             }
             .foregroundStyle(.black)
-            .padding(24)
+            .padding(20)
         }
     }
 }
@@ -323,9 +323,9 @@ struct StatsView: View {
 
             VStack(alignment: .leading, spacing: 22) {
                 Text(profile.appLanguage.text(ru: "Статистика", en: "Stats"))
-                    .font(.system(size: 40, weight: .black, design: .serif))
+                    .font(.system(size: 34, weight: .black, design: .serif))
 
-                HStack(spacing: 14) {
+                HStack(spacing: 12) {
                     statCard(
                         icon: "flame.fill",
                         title: profile.appLanguage.text(ru: "Серия", en: "Streak"),
@@ -346,32 +346,32 @@ struct StatsView: View {
 
                 Spacer()
             }
-            .padding(24)
+            .padding(20)
         }
     }
 
     private func statCard(icon: String, title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 26, weight: .black))
+                .font(.system(size: 22, weight: .black))
                 .foregroundStyle(AtlasColors.green)
 
             Text(value)
-                .font(.system(size: 40, weight: .black, design: .rounded))
+                .font(.system(size: 33, weight: .black, design: .rounded))
 
             Text(title)
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .font(.system(size: 14, weight: .heavy, design: .rounded))
                 .foregroundStyle(.black.opacity(0.62))
         }
         .foregroundStyle(.black)
-        .padding(18)
+        .padding(15)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(AtlasColors.line, lineWidth: 2)
         )
-        .shadow(color: AtlasColors.line, radius: 0, y: 6)
+        .shadow(color: AtlasColors.line, radius: 0, y: 5)
     }
 }
