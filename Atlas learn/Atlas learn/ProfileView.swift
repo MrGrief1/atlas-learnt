@@ -16,62 +16,48 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            AtlasColors.deepInk
+        ZStack {
+            AtlasColors.paper
                 .ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 22) {
-                    header
+            VStack(alignment: .leading, spacing: 18) {
+                titleBar
 
-                    Text(language.text(ru: "Профиль", en: "Profile"))
-                        .font(.system(size: 36, weight: .black, design: .serif))
-                        .foregroundStyle(.black)
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        premiumCard
+                        takeTestCard
+                        languageCard
 
-                    premiumCard
+                        Text(language.text(ru: "Настроить приложение", en: "Customize the app"))
+                            .font(.system(size: 24, weight: .black, design: .rounded))
+                            .foregroundStyle(.black)
+                            .padding(.top, 4)
 
-                    takeTestCard
-
-                    languageCard
-
-                    Text(language.text(ru: "Настроить приложение", en: "Customize the app"))
-                        .font(.system(size: 24, weight: .black, design: .rounded))
-                        .foregroundStyle(.black)
-                        .padding(.top, 6)
-
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
-                        ProfileTile(
-                            title: language.text(ru: "Темы", en: "Topics"),
-                            icon: "square.stack.3d.up",
-                            color: AtlasColors.mint
-                        )
-                        ProfileTile(
-                            title: language.text(ru: "Напоминания", en: "Reminders"),
-                            icon: "bell.badge",
-                            color: AtlasColors.mint
-                        )
-                        ProfileTile(
-                            title: language.text(ru: "Голоса", en: "Voices"),
-                            icon: "waveform",
-                            color: AtlasColors.mint
-                        )
-                        ProfileTile(
-                            title: language.text(ru: "Виджеты", en: "Widgets"),
-                            icon: "apps.iphone",
-                            color: AtlasColors.mint
-                        )
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
+                            ProfileTile(
+                                title: language.text(ru: "Темы", en: "Topics"),
+                                icon: "square.stack.3d.up"
+                            )
+                            ProfileTile(
+                                title: language.text(ru: "Напоминания", en: "Reminders"),
+                                icon: "bell.badge"
+                            )
+                            ProfileTile(
+                                title: language.text(ru: "Голоса", en: "Voices"),
+                                icon: "waveform"
+                            )
+                            ProfileTile(
+                                title: language.text(ru: "Виджеты", en: "Widgets"),
+                                icon: "apps.iphone"
+                            )
+                        }
                     }
-
-                    Spacer(minLength: 18)
+                    .padding(.bottom, 24)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 22)
-                .padding(.bottom, 34)
             }
-            .background(AtlasColors.paper)
-            .clipShape(RoundedRectangle(cornerRadius: 36, style: .continuous))
-            .padding(.top, 64)
-            .ignoresSafeArea(edges: .bottom)
+            .padding(.horizontal, 18)
+            .padding(.top, 20)
         }
         .atlasSoftMotion(profile.appLanguage)
         .atlasMotion(profile.dailyGoal)
@@ -80,19 +66,41 @@ struct ProfileView: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            PaperIconButton(systemName: "xmark") {
-                dismiss()
-            }
+    private var titleBar: some View {
+        HStack(spacing: 12) {
+            Text(language.text(ru: "Профиль", en: "Profile"))
+                .font(.system(size: 34, weight: .black, design: .serif))
+                .foregroundStyle(.black)
 
             Spacer()
 
-            PaperIconButton(systemName: "gearshape") {
+            Button {
+                AtlasHaptics.tap()
                 withAnimation(.atlasSpring) {
                     profile.dailyGoal = profile.dailyGoal == 5 ? 7 : 5
                 }
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(.black)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(.white))
+                    .overlay(Circle().stroke(.black, lineWidth: 2))
             }
+            .buttonStyle(.plain)
+
+            Button {
+                AtlasHaptics.tap()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(.black)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(.white))
+                    .overlay(Circle().stroke(.black, lineWidth: 2))
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -215,7 +223,6 @@ struct ProfileView: View {
 struct ProfileTile: View {
     let title: String
     let icon: String
-    let color: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

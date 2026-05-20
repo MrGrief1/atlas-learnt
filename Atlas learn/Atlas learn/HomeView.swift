@@ -68,7 +68,7 @@ struct HomeView: View {
         )
         .atlasMotion(currentWord.id)
         .atlasSoftMotion(profile)
-        .fullScreenCover(isPresented: $showsProfile) {
+        .sheet(isPresented: $showsProfile) {
             ProfileView(
                 profile: $profile,
                 resetOnboarding: resetOnboarding
@@ -144,7 +144,7 @@ struct HomeView: View {
                     .lineLimit(1)
 
                 Button {
-                    nextWord()
+                    speakCurrentWord()
                 } label: {
                     HStack(spacing: 8) {
                         Text(currentWord.ipa)
@@ -255,6 +255,11 @@ struct HomeView: View {
         withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
             currentIndex = (currentIndex + 1) % dailyWords.count
         }
+    }
+
+    private func speakCurrentWord() {
+        AtlasHaptics.tap()
+        AtlasSpeech.speak(currentWord.english)
     }
 
     private func previousWord(triggerHaptic: Bool = true) {

@@ -1,0 +1,26 @@
+//
+//  AtlasSpeech.swift
+//  Atlas learn
+//
+
+import AVFoundation
+import Foundation
+
+@MainActor
+enum AtlasSpeech {
+    private static let synthesizer = AVSpeechSynthesizer()
+
+    static func speak(_ text: String, language: String = "en-US") {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: language)
+        utterance.rate = 0.46
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+
+        synthesizer.speak(utterance)
+    }
+}
