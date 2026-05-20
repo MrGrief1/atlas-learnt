@@ -8,14 +8,60 @@
 import SwiftUI
 
 struct ContentView: View {
+    @AppStorage("atlas.hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("atlas.profile") private var storedProfile = ""
+
+    @State private var profile = AtlasProfile.default
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        Group {
+            if hasCompletedOnboarding {
+                HomeView(
+                    profile: $profile,
+                    resetOnboarding: resetOnboarding
+                )
+            } else {
+                OnboardingView { completedProfile in
+                    profile = completedProfile
+                    save(completedProfile)
+                    hasCompletedOnboarding = true
+                }
+            }
         }
-        .padding()
+        .onAppear {
+            profile = loadProfile()
+        }
+        .onChange(of: profile) { _, newValue in
+            save(newValue)
+        }
+    }
+
+    private func loadProfile() -> AtlasProfile {
+        guard
+            let data = storedProfile.data(using: .utf8),
+            let decoded = try? JSONDecoder().decode(AtlasProfile.self, from: data)
+        else {
+            return .default
+        }
+
+        return decoded
+    }
+
+    private func save(_ profile: AtlasProfile) {
+        guard
+            let data = try? JSONEncoder().encode(profile),
+            let json = String(data: data, encoding: .utf8)
+        else {
+            return
+        }
+
+        storedProfile = json
+    }
+
+    private func resetOnboarding() {
+        profile = .default
+        storedProfile = ""
+        hasCompletedOnboarding = false
     }
 }
 
