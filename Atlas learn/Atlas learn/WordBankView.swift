@@ -118,7 +118,6 @@ struct WordBankView: View {
                     .padding(.horizontal, AtlasLayout.scrollShadowPadding)
                     .padding(.bottom, 24)
                 }
-                .scrollClipDisabled()
             }
             .padding(.horizontal, AtlasLayout.modalPadding - AtlasLayout.scrollShadowPadding)
             .padding(.top, 20)

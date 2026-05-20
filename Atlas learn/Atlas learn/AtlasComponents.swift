@@ -20,7 +20,7 @@ enum AtlasColors {
 enum AtlasLayout {
     static let screenPadding: CGFloat = 26
     static let modalPadding: CGFloat = 20
-    static let scrollShadowPadding: CGFloat = 0
+    static let scrollShadowPadding: CGFloat = 6
 }
 
 struct CircleIconButton: View {
@@ -173,12 +173,12 @@ struct AtlasSegmentedPicker<Option: Hashable & Identifiable>: View {
         .background(
             RoundedRectangle(cornerRadius: 21, style: .continuous)
                 .fill(AtlasColors.mint.opacity(0.34))
+                .shadow(color: .black.opacity(0.34), radius: 0, y: 3)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 21, style: .continuous)
                 .stroke(.black.opacity(0.76), lineWidth: 2.2)
         )
-        .shadow(color: .black.opacity(0.42), radius: 0, y: 4)
         .atlasMotion(selection)
     }
 }
