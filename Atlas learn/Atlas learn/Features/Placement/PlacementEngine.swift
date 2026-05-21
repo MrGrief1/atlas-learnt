@@ -39,7 +39,8 @@ struct PlacementEngine: Equatable {
         let recent = attempt.answers.suffix(8)
         let meanScore = recent.map(\.score).reduce(0, +) / Double(max(recent.count, 1))
         let consistency = 1.0 - min(1.0, abs(meanScore - 0.5) * 0.8)
-        let coverage = Double(Set(attempt.answers.map(\.skill)).count) / Double(PlacementSkill.allCases.count)
+        let availableSkills = Set(itemBank.map(\.skill))
+        let coverage = Double(Set(attempt.answers.map(\.skill)).count) / Double(max(availableSkills.count, 1))
         let lengthFactor = min(1.0, Double(answeredCount) / 32.0)
         let stability = levelStableInRecentAnswers ? 0.18 : 0
         return min(0.96, 0.18 + lengthFactor * 0.34 + coverage * 0.22 + (1 - consistency) * 0.10 + stability)
@@ -111,6 +112,10 @@ struct PlacementEngine: Equatable {
     }
 
     private func score(answer: String, item: PlacementItem) -> Double {
+        if answer == PlacementAnswerValue.unknownWord {
+            return 0
+        }
+
         let normalizedAnswer = normalized(answer)
         let acceptable = ([item.correctAnswer] + item.acceptableAnswers).map(normalized)
 
@@ -131,9 +136,19 @@ struct PlacementEngine: Equatable {
         let atlasScore = LearningLevel.atlasScore(fromTheta: theta)
         let level = LearningLevel.from(atlasScore: atlasScore)
         let skillScores = makeSkillScores(defaultScore: atlasScore)
-        let sortedSkills = skillScores.sorted { $0.value < $1.value }
-        let weakSkills = sortedSkills.prefix(2).map(\.key)
-        let strongSkills = sortedSkills.reversed().prefix(2).map(\.key)
+        let answeredSkills = Set(attempt.answers.map(\.skill))
+        let sortedSkills = skillScores
+            .filter { answeredSkills.contains($0.key) }
+            .sorted { $0.value < $1.value }
+        let weakSkills = sortedSkills
+            .filter { $0.value < atlasScore }
+            .prefix(2)
+            .map(\.key)
+        let strongSkills = sortedSkills
+            .reversed()
+            .filter { $0.value > atlasScore }
+            .prefix(2)
+            .map(\.key)
         let wrongWordIDs = attempt.answers
             .filter { $0.score < 0.75 }
             .compactMap(\.wordID)

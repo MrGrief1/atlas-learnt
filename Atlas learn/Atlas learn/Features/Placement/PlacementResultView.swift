@@ -16,8 +16,8 @@ struct PlacementResultView: View {
                 Text(language.text(ru: "Готово. Я собрал твой старт.", en: "Done. Your start is ready."))
                     .font(.system(size: 30, weight: .black, design: .serif))
                 Text(language.text(
-                    ru: "Теперь путь строится от CEFR, навыков и слабых мест, а не от кликов по переводам.",
-                    en: "Your path now uses CEFR, skills, and weak spots, not translation clicks."
+                    ru: "Теперь путь строится от CEFR-уровня и слов, которые нужно подтянуть.",
+                    en: "Your path now uses your CEFR level and the words that need more practice."
                 ))
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(.black.opacity(0.62))

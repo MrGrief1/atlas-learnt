@@ -79,7 +79,7 @@ enum LessonMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum LessonTaskType: String, Codable, CaseIterable, Identifiable {
+enum LessonTaskType: String, Codable, CaseIterable, Identifiable, Hashable {
     case introCard
     case meaningChoice
     case contextChoice

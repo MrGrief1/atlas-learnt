@@ -105,6 +105,10 @@ enum AnswerConfidence: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum PlacementAnswerValue {
+    static let unknownWord = "__atlas_unknown_word__"
+}
+
 struct PlacementItem: Codable, Identifiable, Equatable {
     let id: String
     let skill: PlacementSkill

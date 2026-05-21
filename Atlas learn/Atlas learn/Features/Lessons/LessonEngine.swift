@@ -236,13 +236,26 @@ enum LessonEngine {
         let fallbackWords = words.isEmpty ? pickSessionWords(profile: profile, count: 4) : words
         guard !fallbackWords.isEmpty else { return tasks }
 
-        let cycle = taskCycle(for: mode)
         var cursor = 0
 
         while tasks.count < targetCount {
             let word = fallbackWords[cursor % fallbackWords.count]
-            let type = nextAllowedType(from: cycle, existing: tasks, cursor: cursor)
-            tasks.append(LessonTaskFactory.task(type, for: word, seed: tasks.count + cursor * 13))
+
+            let type = AdaptiveLessonPlanner.bestNextType(
+                for: word,
+                profile: profile,
+                mode: mode,
+                previousTasks: tasks
+            )
+
+            tasks.append(
+                LessonTaskFactory.task(
+                    type,
+                    for: word,
+                    seed: tasks.count + cursor * 13
+                )
+            )
+
             cursor += 1
         }
 

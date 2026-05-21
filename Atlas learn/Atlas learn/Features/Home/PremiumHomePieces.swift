@@ -83,7 +83,7 @@ struct PremiumWordHeroView: View {
     }
 
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 18) {
             VStack(spacing: 12) {
                 Text(word.english.lowercased())
                     .font(.system(size: wordFontSize, weight: .black, design: .serif))
@@ -154,8 +154,8 @@ struct PremiumWordHeroView: View {
                 .scaleEffect(0.92)
                 .padding(.top, 2)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
         .frame(maxWidth: .infinity)
         .background(Color.white.opacity(0.075))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))

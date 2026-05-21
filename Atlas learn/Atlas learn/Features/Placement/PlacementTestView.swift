@@ -90,13 +90,13 @@ struct PlacementTestView: View {
                     .background(Capsule().fill(AtlasColors.mint.opacity(0.5)))
             }
 
-            Text(item.prompt)
+            Text(prompt(for: item))
                 .font(.system(size: 21, weight: .black, design: .rounded))
                 .fixedSize(horizontal: false, vertical: true)
 
             if let text = item.text {
                 Text(text)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(textFont(for: item))
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(14)
@@ -163,6 +163,21 @@ struct PlacementTestView: View {
         .shadow(color: AtlasColors.line, radius: 0, y: 5)
     }
 
+    private func prompt(for item: PlacementItem) -> String {
+        switch item.type {
+        case .wordMeaning:
+            language.text(ru: "Выбери перевод", en: "Choose the translation")
+        default:
+            item.prompt
+        }
+    }
+
+    private func textFont(for item: PlacementItem) -> Font {
+        item.type == .wordMeaning
+            ? .system(size: 32, weight: .black, design: .serif)
+            : .system(size: 16, weight: .bold, design: .rounded)
+    }
+
     private func optionList(_ item: PlacementItem) -> some View {
         VStack(spacing: 10) {
             ForEach(item.options, id: \.self) { option in
@@ -193,7 +208,42 @@ struct PlacementTestView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            if item.type == .wordMeaning {
+                unknownWordButton
+            }
         }
+    }
+
+    private var unknownWordButton: some View {
+        let value = PlacementAnswerValue.unknownWord
+
+        return Button {
+            AtlasHaptics.selection()
+            withAnimation(.atlasSpring) {
+                selectedAnswer = value
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(language.text(ru: "Я не знаю этого слова", en: "I don't know this word"))
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .foregroundStyle(.black)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+                Image(systemName: selectedAnswer == value ? "checkmark.circle.fill" : "questionmark.circle")
+                    .font(.system(size: 19, weight: .black))
+                    .foregroundStyle(selectedAnswer == value ? .black : .black.opacity(0.34))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .background(selectedAnswer == value ? AtlasColors.coral.opacity(0.34) : AtlasColors.paper.opacity(0.46))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(.black.opacity(selectedAnswer == value ? 0.62 : 0.18), lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func typedAnswerField(_ item: PlacementItem) -> some View {

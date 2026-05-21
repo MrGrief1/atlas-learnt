@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var selectedWordID: WordEntry.ID?
     @State private var showsProfile = false
     @State private var showsPractice = false
+    @State private var showsPracticeHub = false
     @State private var showsLessonLauncher = false
     @State private var showsWordBank = false
     @State private var showsStats = false
@@ -72,25 +73,9 @@ struct HomeView: View {
                 .background(PremiumTopFade())
         }
         .safeAreaInset(edge: .bottom) {
-            PremiumLessonDockView(
-                profile: profile,
-                openLesson: { mode in
-                    openLessonLauncher(mode: mode, word: nil)
-                },
-                openWords: {
-                    AtlasHaptics.tap()
-                    showsWordBank = true
-                },
-                openMistakes: {
-                    openLessonLauncher(mode: .weakWords, word: nil)
-                },
-                openStats: {
-                    AtlasHaptics.tap()
-                    showsStats = true
-                }
-            )
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            bottomNavigation
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
         }
         .onAppear {
             AtlasHaptics.prepare()
@@ -128,6 +113,16 @@ struct HomeView: View {
                 showsLessonLauncher = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
                     showsPractice = true
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showsPracticeHub) {
+            PracticeHubView(profile: $profile) { mode in
+                showsPracticeHub = false
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    openLessonLauncher(mode: mode, word: nil)
                 }
             }
             .presentationDetents([.medium, .large])
@@ -235,7 +230,7 @@ struct HomeView: View {
 
     private func wordPage(for word: WordEntry, in size: CGSize) -> some View {
         let topReserve: CGFloat = size.height < 760 ? 132 : 154
-        let dockReserve: CGFloat = size.height < 760 ? 292 : 320
+        let dockReserve: CGFloat = size.height < 760 ? 118 : 138
 
         return VStack(spacing: 0) {
             Spacer(minLength: topReserve)
@@ -268,6 +263,62 @@ struct HomeView: View {
             Spacer(minLength: dockReserve)
         }
         .frame(width: size.width, height: size.height)
+    }
+
+    private var bottomNavigation: some View {
+        HStack(spacing: 12) {
+            CleanHomeBarButton(
+                icon: "square.grid.2x2",
+                title: profile.appLanguage.text(ru: "Слова", en: "Words")
+            ) {
+                AtlasHaptics.tap()
+                showsWordBank = true
+            }
+
+            Button {
+                AtlasHaptics.tap()
+                showsPracticeHub = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "graduationcap.fill")
+                        .font(.system(size: 20, weight: .black))
+
+                    Text(profile.appLanguage.text(ru: "Практика", en: "Practice"))
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity)
+                .frame(height: 58)
+                .background(AtlasColors.mint)
+                .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 23, style: .continuous)
+                        .stroke(Color.black.opacity(0.86), lineWidth: 1.8)
+                )
+                .shadow(color: .black.opacity(0.42), radius: 0, y: 5)
+            }
+            .buttonStyle(.plain)
+
+            CleanHomeBarButton(
+                icon: "chart.bar",
+                title: profile.appLanguage.text(ru: "Статы", en: "Stats")
+            ) {
+                AtlasHaptics.tap()
+                showsStats = true
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(Color(red: 0.075, green: 0.075, blue: 0.08).opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1.2)
+        )
+        .shadow(color: .black.opacity(0.34), radius: 18, y: 10)
     }
 
     private func displayedExample(for word: WordEntry) -> GeneratedWordExample {
@@ -424,6 +475,37 @@ struct HomeView: View {
         withTransaction(transaction) {
             updates()
         }
+    }
+}
+
+private struct CleanHomeBarButton: View {
+    let icon: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 19, weight: .black))
+
+                Text(title)
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(.white.opacity(0.82))
+            .frame(width: 68, height: 58)
+            .background(Color.white.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.09), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
