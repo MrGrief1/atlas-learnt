@@ -37,7 +37,7 @@ struct DailyProgressView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(language.text(ru: "Сегодня", en: "Today"))
                             .font(.system(size: 31, weight: .black, design: .serif))
-                        Text("\(profile.currentLevel.tag) · \(profile.score0To160)/160")
+                        Text("\(profile.levelTag) · \(profile.atlasScore)/600")
                             .font(.system(size: 13, weight: .black, design: .rounded))
                             .foregroundStyle(.black.opacity(0.6))
                     }
@@ -155,6 +155,7 @@ struct StatsView: View {
                     header
                     scorePanel
                     dailyPanel
+                    skillScoresPanel
 
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         statCard(icon: "flame.fill", title: language.text(ru: "Серия", en: "Streak"), value: "\(profile.streak)")
@@ -175,6 +176,9 @@ struct StatsView: View {
                     sectionTitle(language.text(ru: "Слабые слова", en: "Weak words"))
                     weakWordsPanel
 
+                    sectionTitle(language.text(ru: "Достижения", en: "Achievements"))
+                    achievementsPanel
+
                     sectionTitle(language.text(ru: "История", en: "History"))
                     historyPanel
                 }
@@ -191,7 +195,7 @@ struct StatsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(language.text(ru: "Статистика", en: "Stats"))
                     .font(.system(size: 34, weight: .black, design: .serif))
-                Text("\(profile.currentLevel.tag) · \(profile.score0To160)/160")
+                Text("\(profile.levelTag) · \(profile.atlasScore)/600")
                     .font(.system(size: 13, weight: .black, design: .rounded))
                     .foregroundStyle(.black.opacity(0.58))
             }
@@ -217,7 +221,7 @@ struct StatsView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("\(profile.currentLevel.tag) \(profile.currentLevel.title(for: language))")
+                    Text("\(profile.levelTag) \(profile.currentLevel.title(for: language))")
                         .font(.system(size: 26, weight: .black, design: .rounded))
                     Text(profile.currentLevel.shortCanDoRU)
                         .font(.system(size: 13, weight: .bold, design: .rounded))
@@ -227,11 +231,11 @@ struct StatsView: View {
 
                 Spacer()
 
-                Text("\(profile.score0To160)")
+                Text("\(profile.atlasScore)")
                     .font(.system(size: 42, weight: .black, design: .rounded))
             }
 
-            progressBar(Double(profile.score0To160) / 160.0)
+            progressBar(Double(profile.atlasScore) / 600.0)
         }
         .padding(17)
         .background(AtlasColors.mint.opacity(0.72))
@@ -259,6 +263,38 @@ struct StatsView: View {
                 inlineMetric(title: language.text(ru: "Повторить", en: "Due"), value: "\(profile.dueWordsCount)")
                 inlineMetric(title: language.text(ru: "Следующее", en: "Next"), value: nextReviewTitle)
                 inlineMetric(title: language.text(ru: "Точность", en: "Accuracy"), value: percent(today.accuracy))
+            }
+        }
+        .padding(16)
+        .cardSurface(cornerRadius: 23)
+    }
+
+    private var skillScoresPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(language.text(ru: "Навыки", en: "Skills"), systemImage: "chart.bar.xaxis")
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                Spacer()
+                Text(CurriculumEngine.recommendedPath(for: profile))
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.56))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.62)
+            }
+
+            ForEach(PlacementSkill.allCases) { skill in
+                let score = profile.skillScores[skill] ?? profile.atlasScore
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Label(skill.title(for: language), systemImage: skill.icon)
+                            .font(.system(size: 13, weight: .black, design: .rounded))
+                        Spacer()
+                        Text("\(score)")
+                            .font(.system(size: 12, weight: .black, design: .rounded))
+                            .foregroundStyle(.black.opacity(0.58))
+                    }
+                    progressBar(Double(score) / 600.0, height: 7)
+                }
             }
         }
         .padding(16)
@@ -324,6 +360,26 @@ struct StatsView: View {
                         icon: "exclamationmark.bubble",
                         title: "\(word.english) · \(word.russian)",
                         value: "\(profile.wordProgress[word.id]?.mastery ?? 0)%"
+                    )
+                }
+            }
+        }
+        .padding(14)
+        .cardSurface(cornerRadius: 23)
+    }
+
+    private var achievementsPanel: some View {
+        let unlocked = AchievementEngine.unlockedAchievements(for: profile)
+
+        return VStack(spacing: 10) {
+            if unlocked.isEmpty {
+                emptyPanel(icon: "sparkles", title: language.text(ru: "Первые достижения скоро появятся", en: "First achievements will appear soon"))
+            } else {
+                ForEach(unlocked.prefix(6)) { achievement in
+                    row(
+                        icon: achievement.icon,
+                        title: achievement.title(for: language),
+                        value: "+\(achievement.xpReward)"
                     )
                 }
             }

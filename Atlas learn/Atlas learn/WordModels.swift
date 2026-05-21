@@ -76,6 +76,19 @@ enum LearningLevel: String, CaseIterable, Codable, Identifiable, Comparable {
 
     var scoreStart: Int { scoreRange.lowerBound }
 
+    var atlasScoreRange: ClosedRange<Int> {
+        switch self {
+        case .a1: 0...99
+        case .a2: 100...199
+        case .b1: 200...299
+        case .b2: 300...399
+        case .c1: 400...499
+        case .c2: 500...600
+        }
+    }
+
+    var atlasScoreStart: Int { atlasScoreRange.lowerBound }
+
     var englishTitle: String {
         switch self {
         case .a1: "Beginner"
@@ -124,6 +137,31 @@ enum LearningLevel: String, CaseIterable, Codable, Identifiable, Comparable {
     static func from(score: Int) -> LearningLevel {
         let clamped = max(0, min(score, 160))
         return allCases.first { $0.scoreRange.contains(clamped) } ?? .c2
+    }
+
+    static func from(atlasScore: Int) -> LearningLevel {
+        let clamped = max(0, min(atlasScore, 600))
+        return allCases.first { $0.atlasScoreRange.contains(clamped) } ?? .c2
+    }
+
+    static func atlasScore(fromLegacyScore score: Int) -> Int {
+        Int((Double(max(0, min(score, 160))) / 160.0 * 600.0).rounded())
+    }
+
+    static func legacyScore(fromAtlasScore atlasScore: Int) -> Int {
+        Int((Double(max(0, min(atlasScore, 600))) / 600.0 * 160.0).rounded())
+    }
+
+    static func atlasScore(fromTheta theta: Double) -> Int {
+        let normalized = (min(max(theta, -3.0), 3.0) + 3.0) / 6.0
+        return min(600, max(0, Int((normalized * 600).rounded())))
+    }
+
+    static func sublevel(forAtlasScore atlasScore: Int) -> LearningSublevel {
+        let level = from(atlasScore: atlasScore)
+        let position = max(0, min(99, atlasScore - level.atlasScoreRange.lowerBound))
+        let index = min(4, max(1, (position / 25) + 1))
+        return LearningSublevel(level: level, index: index)
     }
 
     static func calibrated(from selected: LearningLevel, correctCount: Int, total: Int) -> (level: LearningLevel, score: Int) {
@@ -182,6 +220,21 @@ enum PracticeMode: String, CaseIterable, Codable, Identifiable {
     case clozeWord
     case wordOrder
     case speechRepeat
+    case senseSnap
+    case contextCloze
+    case collocationLock
+    case dialogueChoice
+    case wordBuilder
+    case audioCatch
+    case dictationSprint
+    case tileTranslation
+    case grammarBridge
+    case mistakeClinic
+    case memoryPairs
+    case speedReview
+    case speakingEcho
+    case bossChallenge
+    case sentenceOrder
 
     var id: String { rawValue }
 
@@ -200,6 +253,21 @@ enum PracticeMode: String, CaseIterable, Codable, Identifiable {
         case .clozeWord: "text.cursor"
         case .wordOrder: "text.line.first.and.arrowtriangle.forward"
         case .speechRepeat: "mic.fill"
+        case .senseSnap: "scope"
+        case .contextCloze: "text.cursor"
+        case .collocationLock: "lock.doc"
+        case .dialogueChoice: "bubble.left.and.bubble.right"
+        case .wordBuilder: "hammer"
+        case .audioCatch: "ear"
+        case .dictationSprint: "keyboard"
+        case .tileTranslation: "square.grid.3x3"
+        case .grammarBridge: "point.3.connected.trianglepath.dotted"
+        case .mistakeClinic: "cross.case"
+        case .memoryPairs: "rectangle.on.rectangle"
+        case .speedReview: "timer"
+        case .speakingEcho: "mic.circle"
+        case .bossChallenge: "crown"
+        case .sentenceOrder: "text.line.first.and.arrowtriangle.forward"
         }
     }
 
@@ -231,6 +299,36 @@ enum PracticeMode: String, CaseIterable, Codable, Identifiable {
             language.text(ru: "Порядок слов", en: "Word order")
         case .speechRepeat:
             language.text(ru: "Произношение", en: "Speaking")
+        case .senseSnap:
+            language.text(ru: "Смысл в контексте", en: "Sense Snap")
+        case .contextCloze:
+            language.text(ru: "Контекст", en: "Context Cloze")
+        case .collocationLock:
+            language.text(ru: "Сочетания", en: "Collocation Lock")
+        case .dialogueChoice:
+            language.text(ru: "Диалог", en: "Dialogue Choice")
+        case .wordBuilder:
+            language.text(ru: "Собери слово", en: "Word Builder")
+        case .audioCatch:
+            language.text(ru: "Поймай звук", en: "Audio Catch")
+        case .dictationSprint:
+            language.text(ru: "Диктант", en: "Dictation Sprint")
+        case .tileTranslation:
+            language.text(ru: "Плитки 2.0", en: "Tile Translation")
+        case .grammarBridge:
+            language.text(ru: "Грамматика", en: "Grammar Bridge")
+        case .mistakeClinic:
+            language.text(ru: "Клиника ошибок", en: "Mistake Clinic")
+        case .memoryPairs:
+            language.text(ru: "Пары памяти", en: "Memory Pairs")
+        case .speedReview:
+            language.text(ru: "Скорость", en: "Speed Review")
+        case .speakingEcho:
+            language.text(ru: "Эхо", en: "Speaking Echo")
+        case .bossChallenge:
+            language.text(ru: "Босс", en: "Boss Challenge")
+        case .sentenceOrder:
+            language.text(ru: "Порядок", en: "Sentence Order")
         }
     }
 
@@ -262,6 +360,36 @@ enum PracticeMode: String, CaseIterable, Codable, Identifiable {
             language.text(ru: "Поставь слова в естественном порядке", en: "Put words in a natural order")
         case .speechRepeat:
             language.text(ru: "Повтори слово или короткую фразу", en: "Repeat the word or short phrase")
+        case .senseSnap:
+            language.text(ru: "Пойми значение в живом предложении", en: "Understand meaning inside context")
+        case .contextCloze:
+            language.text(ru: "Вставь слово туда, где оно звучит естественно", en: "Fit the word into a natural context")
+        case .collocationLock:
+            language.text(ru: "Выбери естественное английское сочетание", en: "Choose the natural English phrase")
+        case .dialogueChoice:
+            language.text(ru: "Подбери уместную реплику", en: "Pick the fitting reply")
+        case .wordBuilder:
+            language.text(ru: "Собери слово из частей", en: "Build the word from pieces")
+        case .audioCatch:
+            language.text(ru: "Услышь целевое слово", en: "Catch the target word by ear")
+        case .dictationSprint:
+            language.text(ru: "Впиши услышанное слово", en: "Type the word you hear")
+        case .tileTranslation:
+            language.text(ru: "Собери фразу с лишними плитками", en: "Build the sentence with extra tiles")
+        case .grammarBridge:
+            language.text(ru: "Проверь грамматику через слово", en: "Check grammar through the word")
+        case .mistakeClinic:
+            language.text(ru: "Исправь недавнюю ошибку в новом формате", en: "Fix a recent mistake in a new format")
+        case .memoryPairs:
+            language.text(ru: "Соедини слово, смысл и контекст", en: "Match word, meaning, and context")
+        case .speedReview:
+            language.text(ru: "Быстрая проверка слабых слов", en: "Fast check for weak words")
+        case .speakingEcho:
+            language.text(ru: "Повтори мягко, без идеального акцента", en: "Repeat softly, no perfect accent required")
+        case .bossChallenge:
+            language.text(ru: "Смешанная проверка без подсказок", en: "Mixed check without hints")
+        case .sentenceOrder:
+            language.text(ru: "Поставь слова в естественный порядок", en: "Put words in a natural order")
         }
     }
 
@@ -280,6 +408,21 @@ enum PracticeMode: String, CaseIterable, Codable, Identifiable {
         case .clozeWord: 10
         case .wordOrder: 12
         case .speechRepeat: 10
+        case .senseSnap: 8
+        case .contextCloze: 12
+        case .collocationLock: 12
+        case .dialogueChoice: 8
+        case .wordBuilder: 10
+        case .audioCatch: 10
+        case .dictationSprint: 12
+        case .tileTranslation: 12
+        case .grammarBridge: 12
+        case .mistakeClinic: 10
+        case .memoryPairs: 8
+        case .speedReview: 5
+        case .speakingEcho: 15
+        case .bossChallenge: 20
+        case .sentenceOrder: 12
         }
     }
 }
@@ -356,6 +499,7 @@ enum PracticeStep: String, CaseIterable, Codable, Identifiable {
 struct PracticeStageResult: Codable, Equatable, Identifiable {
     let id: UUID
     let step: PracticeStep
+    let mode: PracticeMode
     let wordID: String
     let isCorrect: Bool
     let wasSkipped: Bool
@@ -365,6 +509,7 @@ struct PracticeStageResult: Codable, Equatable, Identifiable {
     init(
         id: UUID = UUID(),
         step: PracticeStep,
+        mode: PracticeMode? = nil,
         wordID: String,
         isCorrect: Bool,
         wasSkipped: Bool = false,
@@ -373,6 +518,7 @@ struct PracticeStageResult: Codable, Equatable, Identifiable {
     ) {
         self.id = id
         self.step = step
+        self.mode = mode ?? step.mode
         self.wordID = wordID
         self.isCorrect = isCorrect
         self.wasSkipped = wasSkipped
@@ -383,6 +529,7 @@ struct PracticeStageResult: Codable, Equatable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id
         case step
+        case mode
         case wordID
         case isCorrect
         case wasSkipped
@@ -394,6 +541,7 @@ struct PracticeStageResult: Codable, Equatable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         step = try container.decode(PracticeStep.self, forKey: .step)
+        mode = try container.decodeIfPresent(PracticeMode.self, forKey: .mode) ?? step.mode
         wordID = try container.decode(String.self, forKey: .wordID)
         isCorrect = try container.decode(Bool.self, forKey: .isCorrect)
         wasSkipped = try container.decodeIfPresent(Bool.self, forKey: .wasSkipped) ?? false
@@ -444,6 +592,7 @@ enum SpeechVoiceOption: String, CaseIterable, Codable, Identifiable {
 
 struct WordEntry: Codable, Hashable, Identifiable {
     let id: String
+    let lemma: String
     let english: String
     let russian: String
     let partOfSpeech: String
@@ -454,11 +603,21 @@ struct WordEntry: Codable, Hashable, Identifiable {
     let exampleRU: String
     let level: LearningLevel
     let topic: String
+    let frequencyRank: Int?
+    let subtopics: [String]
+    let register: String?
     let synonyms: [String]
+    let senses: [WordSense]
     let sentenceTiles: [String]
     let clozeSentence: String
     let hints: [String]
     let collocations: [String]
+    let phrasalForms: [String]
+    let wordFamily: [String]
+    let confusionGroup: [String]
+    let grammarPatterns: [String]
+    let examples: [WordExample]
+    let safetyTags: [String]
     let extraExamplesEN: [String]
     let extraExamplesRU: [String]
     let composePromptEN: String
@@ -486,6 +645,7 @@ struct WordEntry: Codable, Hashable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case lemma
         case english
         case russian
         case partOfSpeech
@@ -497,11 +657,21 @@ struct WordEntry: Codable, Hashable, Identifiable {
         case level
         case cefrLevel
         case topic
+        case frequencyRank
+        case subtopics
+        case register
         case synonyms
+        case senses
         case sentenceTiles
         case clozeSentence
         case hints
         case collocations
+        case phrasalForms
+        case wordFamily
+        case confusionGroup
+        case grammarPatterns
+        case examples
+        case safetyTags
         case extraExamplesEN
         case extraExamplesRU
         case composePromptEN
@@ -511,6 +681,7 @@ struct WordEntry: Codable, Hashable, Identifiable {
 
     init(
         id: String,
+        lemma: String? = nil,
         english: String,
         russian: String,
         partOfSpeech: String,
@@ -521,11 +692,21 @@ struct WordEntry: Codable, Hashable, Identifiable {
         exampleRU: String,
         level: LearningLevel,
         topic: String,
+        frequencyRank: Int? = nil,
+        subtopics: [String] = [],
+        register: String? = nil,
         synonyms: [String],
+        senses: [WordSense] = [],
         sentenceTiles: [String],
         clozeSentence: String,
         hints: [String] = [],
         collocations: [String] = [],
+        phrasalForms: [String] = [],
+        wordFamily: [String] = [],
+        confusionGroup: [String] = [],
+        grammarPatterns: [String] = [],
+        examples: [WordExample] = [],
+        safetyTags: [String] = [],
         extraExamplesEN: [String] = [],
         extraExamplesRU: [String] = [],
         composePromptEN: String = "",
@@ -533,6 +714,7 @@ struct WordEntry: Codable, Hashable, Identifiable {
         acceptedAnswers: [String] = []
     ) {
         self.id = id
+        self.lemma = lemma ?? english.lowercased()
         self.english = english
         self.russian = russian
         self.partOfSpeech = partOfSpeech
@@ -543,11 +725,23 @@ struct WordEntry: Codable, Hashable, Identifiable {
         self.exampleRU = exampleRU
         self.level = level
         self.topic = topic
+        self.frequencyRank = frequencyRank
+        self.subtopics = subtopics
+        self.register = register
         self.synonyms = synonyms
+        self.senses = senses
         self.sentenceTiles = sentenceTiles
         self.clozeSentence = clozeSentence
         self.hints = hints
         self.collocations = collocations
+        self.phrasalForms = phrasalForms
+        self.wordFamily = wordFamily
+        self.confusionGroup = confusionGroup
+        self.grammarPatterns = grammarPatterns
+        self.examples = examples.isEmpty
+            ? [WordExample(english: exampleEN, russian: exampleRU, level: level, topic: topic, source: "local")]
+            : examples
+        self.safetyTags = safetyTags
         self.extraExamplesEN = extraExamplesEN
         self.extraExamplesRU = extraExamplesRU
         self.composePromptEN = composePromptEN.isEmpty ? "Write a short sentence with \(english)." : composePromptEN
@@ -559,6 +753,7 @@ struct WordEntry: Codable, Hashable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         english = try container.decode(String.self, forKey: .english)
+        lemma = try container.decodeIfPresent(String.self, forKey: .lemma) ?? english.lowercased()
         russian = try container.decode(String.self, forKey: .russian)
         partOfSpeech = try container.decodeIfPresent(String.self, forKey: .partOfSpeech) ?? "word"
         ipa = try container.decodeIfPresent(String.self, forKey: .ipa) ?? "/\(english)/"
@@ -570,11 +765,22 @@ struct WordEntry: Codable, Hashable, Identifiable {
             ?? container.decodeIfPresent(LearningLevel.self, forKey: .cefrLevel)
             ?? .a2
         topic = try container.decodeIfPresent(String.self, forKey: .topic) ?? "Everyday"
+        frequencyRank = try container.decodeIfPresent(Int.self, forKey: .frequencyRank)
+        subtopics = try container.decodeIfPresent([String].self, forKey: .subtopics) ?? []
+        register = try container.decodeIfPresent(String.self, forKey: .register)
         synonyms = try container.decodeIfPresent([String].self, forKey: .synonyms) ?? []
+        senses = try container.decodeIfPresent([WordSense].self, forKey: .senses) ?? []
         sentenceTiles = try container.decodeIfPresent([String].self, forKey: .sentenceTiles) ?? exampleEN.split(separator: " ").map(String.init)
         clozeSentence = try container.decodeIfPresent(String.self, forKey: .clozeSentence) ?? exampleEN.replacingOccurrences(of: english, with: "____")
         hints = try container.decodeIfPresent([String].self, forKey: .hints) ?? []
         collocations = try container.decodeIfPresent([String].self, forKey: .collocations) ?? []
+        phrasalForms = try container.decodeIfPresent([String].self, forKey: .phrasalForms) ?? []
+        wordFamily = try container.decodeIfPresent([String].self, forKey: .wordFamily) ?? []
+        confusionGroup = try container.decodeIfPresent([String].self, forKey: .confusionGroup) ?? []
+        grammarPatterns = try container.decodeIfPresent([String].self, forKey: .grammarPatterns) ?? []
+        examples = try container.decodeIfPresent([WordExample].self, forKey: .examples)
+            ?? [WordExample(english: exampleEN, russian: exampleRU, level: level, topic: topic, source: "local")]
+        safetyTags = try container.decodeIfPresent([String].self, forKey: .safetyTags) ?? []
         extraExamplesEN = try container.decodeIfPresent([String].self, forKey: .extraExamplesEN) ?? []
         extraExamplesRU = try container.decodeIfPresent([String].self, forKey: .extraExamplesRU) ?? []
         composePromptEN = try container.decodeIfPresent(String.self, forKey: .composePromptEN) ?? "Write a short sentence with \(english)."
@@ -585,6 +791,7 @@ struct WordEntry: Codable, Hashable, Identifiable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
+        try container.encode(lemma, forKey: .lemma)
         try container.encode(english, forKey: .english)
         try container.encode(russian, forKey: .russian)
         try container.encode(partOfSpeech, forKey: .partOfSpeech)
@@ -595,11 +802,21 @@ struct WordEntry: Codable, Hashable, Identifiable {
         try container.encode(exampleRU, forKey: .exampleRU)
         try container.encode(level, forKey: .level)
         try container.encode(topic, forKey: .topic)
+        try container.encodeIfPresent(frequencyRank, forKey: .frequencyRank)
+        try container.encode(subtopics, forKey: .subtopics)
+        try container.encodeIfPresent(register, forKey: .register)
         try container.encode(synonyms, forKey: .synonyms)
+        try container.encode(senses, forKey: .senses)
         try container.encode(sentenceTiles, forKey: .sentenceTiles)
         try container.encode(clozeSentence, forKey: .clozeSentence)
         try container.encode(hints, forKey: .hints)
         try container.encode(collocations, forKey: .collocations)
+        try container.encode(phrasalForms, forKey: .phrasalForms)
+        try container.encode(wordFamily, forKey: .wordFamily)
+        try container.encode(confusionGroup, forKey: .confusionGroup)
+        try container.encode(grammarPatterns, forKey: .grammarPatterns)
+        try container.encode(examples, forKey: .examples)
+        try container.encode(safetyTags, forKey: .safetyTags)
         try container.encode(extraExamplesEN, forKey: .extraExamplesEN)
         try container.encode(extraExamplesRU, forKey: .extraExamplesRU)
         try container.encode(composePromptEN, forKey: .composePromptEN)
@@ -608,15 +825,72 @@ struct WordEntry: Codable, Hashable, Identifiable {
     }
 }
 
+struct PracticeQuestion: Codable, Equatable, Identifiable {
+    let id: UUID
+    let wordID: WordEntry.ID
+    let step: PracticeStep
+    let isRepair: Bool
+    let task: GeneratedGameTask?
+
+    init(
+        id: UUID = UUID(),
+        wordID: WordEntry.ID,
+        step: PracticeStep,
+        isRepair: Bool = false,
+        task: GeneratedGameTask? = nil
+    ) {
+        self.id = id
+        self.wordID = wordID
+        self.step = step
+        self.isRepair = isRepair
+        self.task = task
+    }
+
+    nonisolated init(task: GeneratedGameTask) {
+        self.id = task.id
+        self.wordID = task.wordID
+        self.step = task.closestStep
+        self.isRepair = task.isRepair
+        self.task = task
+    }
+}
+
 struct PracticeSession: Codable, Equatable, Identifiable {
     let id: UUID
-    var wordIDs: [WordEntry.ID]
-    var currentWordIndex: Int
-    var currentStepIndex: Int
+    var questions: [PracticeQuestion]
+    var currentQuestionIndex: Int
     var hearts: Int
     var xp: Int
     var results: [PracticeStageResult]
-    var steps: [PracticeStep]
+    var repairCounts: [String: Int]
+
+    init(
+        id: UUID = UUID(),
+        questions: [PracticeQuestion],
+        hearts: Int = 3
+    ) {
+        self.id = id
+        self.questions = questions
+        self.currentQuestionIndex = 0
+        self.hearts = hearts
+        self.xp = 0
+        self.results = []
+        self.repairCounts = [:]
+    }
+
+    init(
+        id: UUID = UUID(),
+        tasks: [GeneratedGameTask],
+        hearts: Int = 3
+    ) {
+        self.id = id
+        self.questions = tasks.map(PracticeQuestion.init(task:))
+        self.currentQuestionIndex = 0
+        self.hearts = hearts
+        self.xp = 0
+        self.results = []
+        self.repairCounts = [:]
+    }
 
     init(
         id: UUID = UUID(),
@@ -626,34 +900,125 @@ struct PracticeSession: Codable, Equatable, Identifiable {
         hearts: Int = 3
     ) {
         let uniqueWords = words.uniquedByID()
+        var questions: [PracticeQuestion] = []
+
+        for word in uniqueWords {
+            for step in steps {
+                questions.append(PracticeQuestion(wordID: word.id, step: step))
+            }
+        }
+
+        if let startWordID,
+           let startIndex = questions.firstIndex(where: { $0.wordID == startWordID }) {
+            let prefix = questions[..<startIndex]
+            questions = Array(questions[startIndex...]) + Array(prefix)
+        }
+
         self.id = id
-        self.wordIDs = uniqueWords.map(\.id)
-        self.currentWordIndex = startWordID.flatMap { id in uniqueWords.firstIndex { $0.id == id } } ?? 0
-        self.currentStepIndex = 0
+        self.questions = questions
+        self.currentQuestionIndex = 0
         self.hearts = hearts
         self.xp = 0
         self.results = []
-        self.steps = steps
+        self.repairCounts = [:]
+    }
+
+    var currentQuestion: PracticeQuestion? {
+        guard questions.indices.contains(currentQuestionIndex) else { return nil }
+        return questions[currentQuestionIndex]
+    }
+
+    var currentTask: GeneratedGameTask? {
+        currentQuestion?.task
     }
 
     var currentWordID: WordEntry.ID? {
-        guard wordIDs.indices.contains(currentWordIndex) else { return nil }
-        return wordIDs[currentWordIndex]
+        currentQuestion?.wordID
     }
 
     var currentStep: PracticeStep {
-        guard !steps.isEmpty else { return .meaningChoice }
-        return steps[min(currentStepIndex, max(steps.count - 1, 0))]
+        currentQuestion?.step ?? .meaningChoice
     }
 
-    var isOnLastStep: Bool {
-        currentStepIndex >= steps.count - 1
+    var currentMode: PracticeMode {
+        currentTask?.mode ?? currentStep.mode
+    }
+
+    var wordIDs: [WordEntry.ID] {
+        var seen = Set<WordEntry.ID>()
+        var result: [WordEntry.ID] = []
+
+        for question in questions where !seen.contains(question.wordID) {
+            seen.insert(question.wordID)
+            result.append(question.wordID)
+        }
+
+        return result
+    }
+
+    var currentWordIndex: Int {
+        guard let currentWordID else { return 0 }
+        return wordIDs.firstIndex(of: currentWordID) ?? 0
+    }
+
+    var wordCount: Int {
+        wordIDs.count
+    }
+
+    var questionPosition: Int {
+        min(currentQuestionIndex + 1, max(questions.count, 1))
+    }
+
+    var questionCount: Int {
+        questions.count
+    }
+
+    var currentWordSteps: [PracticeStep] {
+        guard let currentWordID else { return [] }
+
+        var seen = Set<PracticeStep>()
+        var result: [PracticeStep] = []
+
+        for question in questions where question.wordID == currentWordID && !question.isRepair {
+            guard !seen.contains(question.step) else { continue }
+            seen.insert(question.step)
+            result.append(question.step)
+        }
+
+        if !seen.contains(currentStep) {
+            result.append(currentStep)
+        }
+
+        return result
+    }
+
+    var currentWordModes: [PracticeMode] {
+        guard let currentWordID else { return [] }
+
+        var seen = Set<PracticeMode>()
+        var result: [PracticeMode] = []
+
+        for question in questions where question.wordID == currentWordID && !question.isRepair {
+            let mode = question.task?.mode ?? question.step.mode
+            guard !seen.contains(mode) else { continue }
+            seen.insert(mode)
+            result.append(mode)
+        }
+
+        if !seen.contains(currentMode) {
+            result.append(currentMode)
+        }
+
+        return result
+    }
+
+    var isOnLastQuestion: Bool {
+        currentQuestionIndex >= questions.count - 1
     }
 
     var progress: Double {
-        guard !wordIDs.isEmpty, !steps.isEmpty else { return 0 }
-        let completed = currentWordIndex * steps.count + currentStepIndex
-        return Double(completed) / Double(wordIDs.count * steps.count)
+        guard !questions.isEmpty else { return 0 }
+        return Double(currentQuestionIndex) / Double(questions.count)
     }
 
     var correctCount: Int {
@@ -668,21 +1033,44 @@ struct PracticeSession: Codable, Equatable, Identifiable {
         results.filter { !$0.wasSkipped }.count
     }
 
-    mutating func record(step: PracticeStep, wordID: WordEntry.ID, isCorrect: Bool, xp: Int, wasSkipped: Bool = false) {
-        results.append(PracticeStageResult(step: step, wordID: wordID, isCorrect: isCorrect, wasSkipped: wasSkipped, xp: xp))
+    var practicedWordCount: Int {
+        Set(results.map(\.wordID)).count
+    }
+
+    @discardableResult
+    mutating func record(step: PracticeStep, mode: PracticeMode? = nil, wordID: WordEntry.ID, isCorrect: Bool, xp: Int, wasSkipped: Bool = false) -> Bool {
+        results.append(PracticeStageResult(step: step, mode: mode, wordID: wordID, isCorrect: isCorrect, wasSkipped: wasSkipped, xp: xp))
         self.xp += xp
+
         if !isCorrect && !wasSkipped {
             hearts = max(0, hearts - 1)
+            return scheduleRepairIfNeeded(step: step, wordID: wordID)
         }
+
+        return false
     }
 
-    mutating func advanceStep() {
-        currentStepIndex = min(currentStepIndex + 1, max(steps.count - 1, 0))
+    mutating func advanceQuestion() {
+        currentQuestionIndex = min(currentQuestionIndex + 1, max(questions.count - 1, 0))
     }
 
-    mutating func advanceWord() {
-        currentWordIndex = min(currentWordIndex + 1, max(wordIDs.count - 1, 0))
-        currentStepIndex = 0
+    private mutating func scheduleRepairIfNeeded(step: PracticeStep, wordID: WordEntry.ID) -> Bool {
+        let key = "\(wordID)|\(step.rawValue)"
+        let count = repairCounts[key, default: 0]
+
+        guard count < 2 else { return false }
+
+        repairCounts[key] = count + 1
+
+        let repairQuestion: PracticeQuestion
+        if let task = currentQuestion?.task {
+            repairQuestion = PracticeQuestion(task: task.repairVariant())
+        } else {
+            repairQuestion = PracticeQuestion(wordID: wordID, step: step, isRepair: true)
+        }
+        let insertIndex = min(currentQuestionIndex + 3, questions.count)
+        questions.insert(repairQuestion, at: insertIndex)
+        return true
     }
 }
 
@@ -734,21 +1122,116 @@ enum WordSortOption: String, CaseIterable, Identifiable {
 }
 
 struct WordMemory: Codable, Equatable {
+    var exposures: Int
     var correctCount: Int
     var wrongCount: Int
     var streak: Int
     var mastery: Int
+    var stability: Double
+    var difficulty: Double
+    var retrievability: Double
     var lastPracticedAt: Date?
     var dueAt: Date?
+    var lastModes: [PracticeMode]
+    var errorTypes: [ErrorType: Int]
+    var confidenceHistory: [Double]
+    var averageResponseTime: Double
+    var boredomScore: Double
+    var personalRelevance: Double
 
     static let fresh = WordMemory(
+        exposures: 0,
         correctCount: 0,
         wrongCount: 0,
         streak: 0,
         mastery: 0,
+        stability: 1,
+        difficulty: 0.45,
+        retrievability: 0,
         lastPracticedAt: nil,
-        dueAt: nil
+        dueAt: nil,
+        lastModes: [],
+        errorTypes: [:],
+        confidenceHistory: [],
+        averageResponseTime: 0,
+        boredomScore: 0,
+        personalRelevance: 0
     )
+
+    init(
+        exposures: Int = 0,
+        correctCount: Int,
+        wrongCount: Int,
+        streak: Int,
+        mastery: Int,
+        stability: Double = 1,
+        difficulty: Double = 0.45,
+        retrievability: Double = 0,
+        lastPracticedAt: Date?,
+        dueAt: Date?,
+        lastModes: [PracticeMode] = [],
+        errorTypes: [ErrorType: Int] = [:],
+        confidenceHistory: [Double] = [],
+        averageResponseTime: Double = 0,
+        boredomScore: Double = 0,
+        personalRelevance: Double = 0
+    ) {
+        self.exposures = max(exposures, correctCount + wrongCount)
+        self.correctCount = correctCount
+        self.wrongCount = wrongCount
+        self.streak = streak
+        self.mastery = min(max(mastery, 0), 100)
+        self.stability = stability
+        self.difficulty = min(max(difficulty, 0), 1)
+        self.retrievability = min(max(retrievability, 0), 1)
+        self.lastPracticedAt = lastPracticedAt
+        self.dueAt = dueAt
+        self.lastModes = lastModes
+        self.errorTypes = errorTypes
+        self.confidenceHistory = confidenceHistory
+        self.averageResponseTime = averageResponseTime
+        self.boredomScore = min(max(boredomScore, 0), 1)
+        self.personalRelevance = min(max(personalRelevance, 0), 1)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case exposures
+        case correctCount
+        case wrongCount
+        case streak
+        case mastery
+        case stability
+        case difficulty
+        case retrievability
+        case lastPracticedAt
+        case dueAt
+        case lastModes
+        case errorTypes
+        case confidenceHistory
+        case averageResponseTime
+        case boredomScore
+        case personalRelevance
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        correctCount = try container.decodeIfPresent(Int.self, forKey: .correctCount) ?? 0
+        wrongCount = try container.decodeIfPresent(Int.self, forKey: .wrongCount) ?? 0
+        exposures = try container.decodeIfPresent(Int.self, forKey: .exposures) ?? correctCount + wrongCount
+        streak = try container.decodeIfPresent(Int.self, forKey: .streak) ?? 0
+        mastery = try container.decodeIfPresent(Int.self, forKey: .mastery) ?? 0
+        stability = try container.decodeIfPresent(Double.self, forKey: .stability) ?? 1
+        difficulty = try container.decodeIfPresent(Double.self, forKey: .difficulty) ?? 0.45
+        retrievability = try container.decodeIfPresent(Double.self, forKey: .retrievability) ?? 0
+        lastPracticedAt = try container.decodeIfPresent(Date.self, forKey: .lastPracticedAt)
+        dueAt = try container.decodeIfPresent(Date.self, forKey: .dueAt)
+        lastModes = try container.decodeIfPresent([PracticeMode].self, forKey: .lastModes) ?? []
+        errorTypes = try container.decodeIfPresent([ErrorType: Int].self, forKey: .errorTypes) ?? [:]
+        confidenceHistory = try container.decodeIfPresent([Double].self, forKey: .confidenceHistory) ?? []
+        averageResponseTime = try container.decodeIfPresent(Double.self, forKey: .averageResponseTime) ?? 0
+        boredomScore = try container.decodeIfPresent(Double.self, forKey: .boredomScore) ?? 0
+        personalRelevance = try container.decodeIfPresent(Double.self, forKey: .personalRelevance) ?? 0
+    }
 
     var totalAttempts: Int { correctCount + wrongCount }
 
@@ -799,9 +1282,17 @@ struct AtlasProfile: Codable, Equatable {
     var appLanguage: AppLanguage
     var currentLevel: LearningLevel
     var score0To160: Int
+    var atlasScore: Int
+    var placementResult: PlacementResult?
+    var skillScores: [PlacementSkill: Int]
+    var weakSkills: [PlacementSkill]
+    var strongSkills: [PlacementSkill]
+    var lastPlacementAt: Date?
     var dailyGoal: Int
     var voiceID: SpeechVoiceOption?
     var selectedTopics: [String]
+    var enabledPracticeSteps: [PracticeStep]
+    var settings: LearningSettings
     var unknownWordIDs: [String]
     var savedWordIDs: [String]
     var favoriteWordIDs: [String]
@@ -812,21 +1303,40 @@ struct AtlasProfile: Codable, Equatable {
     var lastStudyDateKey: String
     var streak: Int
     var xp: Int
+    var energy: Int
+    var unlockedAchievementIDs: [String]
+    var currentDailyPack: DailyPack?
 
     var level: LearningLevel {
         get { currentLevel }
         set {
             currentLevel = newValue
-            score0To160 = max(score0To160, newValue.scoreStart)
+            applyAtlasScore(max(atlasScore, newValue.atlasScoreStart))
         }
+    }
+
+    var sublevel: LearningSublevel {
+        LearningLevel.sublevel(forAtlasScore: atlasScore)
+    }
+
+    var levelTag: String {
+        sublevel.tag
     }
 
     static let `default` = AtlasProfile(
         appLanguage: .russian,
         currentLevel: .a2,
         score0To160: LearningLevel.a2.scoreStart,
+        atlasScore: LearningLevel.a2.atlasScoreStart,
+        placementResult: nil,
+        skillScores: [:],
+        weakSkills: [],
+        strongSkills: [],
+        lastPlacementAt: nil,
         dailyGoal: 7,
         selectedTopics: ["Everyday", "Work", "Study"],
+        enabledPracticeSteps: PracticeStep.allCases,
+        settings: .default,
         unknownWordIDs: [],
         savedWordIDs: [],
         favoriteWordIDs: [],
@@ -835,16 +1345,27 @@ struct AtlasProfile: Codable, Equatable {
         dailyProgress: [:],
         practiceHistory: [],
         streak: 0,
-        xp: 0
+        xp: 0,
+        energy: EnergyEngine.maxEnergy,
+        unlockedAchievementIDs: [],
+        currentDailyPack: nil
     )
 
     init(
         appLanguage: AppLanguage,
         currentLevel: LearningLevel,
         score0To160: Int,
+        atlasScore: Int? = nil,
+        placementResult: PlacementResult? = nil,
+        skillScores: [PlacementSkill: Int] = [:],
+        weakSkills: [PlacementSkill] = [],
+        strongSkills: [PlacementSkill] = [],
+        lastPlacementAt: Date? = nil,
         dailyGoal: Int,
         voiceID: SpeechVoiceOption? = .american,
         selectedTopics: [String],
+        enabledPracticeSteps: [PracticeStep] = PracticeStep.allCases,
+        settings: LearningSettings? = nil,
         unknownWordIDs: [String],
         savedWordIDs: [String],
         favoriteWordIDs: [String],
@@ -853,14 +1374,34 @@ struct AtlasProfile: Codable, Equatable {
         dailyProgress: [String: DailyProgress],
         practiceHistory: [PracticeRecord],
         streak: Int,
-        xp: Int
+        xp: Int,
+        energy: Int = EnergyEngine.maxEnergy,
+        unlockedAchievementIDs: [String] = [],
+        currentDailyPack: DailyPack? = nil
     ) {
         self.appLanguage = appLanguage
-        self.currentLevel = currentLevel
         self.score0To160 = max(0, min(score0To160, 160))
+        self.atlasScore = max(0, min(atlasScore ?? LearningLevel.atlasScore(fromLegacyScore: score0To160), 600))
+        self.currentLevel = LearningLevel.from(atlasScore: self.atlasScore)
+        if self.currentLevel != currentLevel && atlasScore == nil {
+            self.currentLevel = currentLevel
+            self.atlasScore = max(self.atlasScore, currentLevel.atlasScoreStart)
+        }
+        self.placementResult = placementResult
+        self.skillScores = skillScores
+        self.weakSkills = weakSkills
+        self.strongSkills = strongSkills
+        self.lastPlacementAt = lastPlacementAt
         self.dailyGoal = dailyGoal
         self.voiceID = voiceID
         self.selectedTopics = selectedTopics
+        self.enabledPracticeSteps = enabledPracticeSteps.isEmpty ? PracticeStep.allCases : enabledPracticeSteps
+        var resolvedSettings = settings ?? .default
+        resolvedSettings.appLanguage = appLanguage
+        resolvedSettings.dailyGoal = dailyGoal
+        resolvedSettings.selectedTopics = selectedTopics
+        resolvedSettings.preferredVoice = voiceID ?? .american
+        self.settings = resolvedSettings
         self.unknownWordIDs = unknownWordIDs
         self.savedWordIDs = savedWordIDs
         self.favoriteWordIDs = favoriteWordIDs
@@ -871,6 +1412,10 @@ struct AtlasProfile: Codable, Equatable {
         self.lastStudyDateKey = Self.todayKey()
         self.streak = streak
         self.xp = xp
+        self.energy = EnergyEngine.clamped(energy)
+        self.unlockedAchievementIDs = unlockedAchievementIDs
+        self.currentDailyPack = currentDailyPack
+        self.score0To160 = LearningLevel.legacyScore(fromAtlasScore: self.atlasScore)
         prepareForToday()
     }
 
@@ -879,9 +1424,18 @@ struct AtlasProfile: Codable, Equatable {
         case level
         case currentLevel
         case score0To160
+        case atlasScore
+        case atlasScore0To600
+        case placementResult
+        case skillScores
+        case weakSkills
+        case strongSkills
+        case lastPlacementAt
         case dailyGoal
         case voiceID
         case selectedTopics
+        case enabledPracticeSteps
+        case settings
         case unknownWordIDs
         case savedWordIDs
         case favoriteWordIDs
@@ -892,6 +1446,9 @@ struct AtlasProfile: Codable, Equatable {
         case lastStudyDateKey
         case streak
         case xp
+        case energy
+        case unlockedAchievementIDs
+        case currentDailyPack
     }
 
     init(from decoder: Decoder) throws {
@@ -900,11 +1457,29 @@ struct AtlasProfile: Codable, Equatable {
         let migratedLevel = try container.decodeIfPresent(LearningLevel.self, forKey: .currentLevel)
             ?? container.decodeIfPresent(LearningLevel.self, forKey: .level)
             ?? .a2
-        currentLevel = migratedLevel
         score0To160 = try container.decodeIfPresent(Int.self, forKey: .score0To160) ?? migratedLevel.scoreStart
+        atlasScore = try container.decodeIfPresent(Int.self, forKey: .atlasScore)
+            ?? container.decodeIfPresent(Int.self, forKey: .atlasScore0To600)
+            ?? LearningLevel.atlasScore(fromLegacyScore: score0To160)
+        atlasScore = max(0, min(atlasScore, 600))
+        currentLevel = LearningLevel.from(atlasScore: atlasScore)
+        placementResult = try container.decodeIfPresent(PlacementResult.self, forKey: .placementResult)
+        skillScores = try container.decodeIfPresent([PlacementSkill: Int].self, forKey: .skillScores) ?? placementResult?.skillScores ?? [:]
+        weakSkills = try container.decodeIfPresent([PlacementSkill].self, forKey: .weakSkills) ?? placementResult?.weakSkills ?? []
+        strongSkills = try container.decodeIfPresent([PlacementSkill].self, forKey: .strongSkills) ?? placementResult?.strongSkills ?? []
+        lastPlacementAt = try container.decodeIfPresent(Date.self, forKey: .lastPlacementAt) ?? placementResult?.createdAt
         dailyGoal = try container.decodeIfPresent(Int.self, forKey: .dailyGoal) ?? 7
         voiceID = try container.decodeIfPresent(SpeechVoiceOption.self, forKey: .voiceID) ?? .american
         selectedTopics = try container.decodeIfPresent([String].self, forKey: .selectedTopics) ?? ["Everyday", "Work", "Study"]
+        enabledPracticeSteps = try container.decodeIfPresent([PracticeStep].self, forKey: .enabledPracticeSteps) ?? PracticeStep.allCases
+        if enabledPracticeSteps.isEmpty {
+            enabledPracticeSteps = PracticeStep.allCases
+        }
+        settings = try container.decodeIfPresent(LearningSettings.self, forKey: .settings) ?? .default
+        settings.appLanguage = appLanguage
+        settings.dailyGoal = dailyGoal
+        settings.selectedTopics = selectedTopics
+        settings.preferredVoice = voiceID ?? .american
         unknownWordIDs = try container.decodeIfPresent([String].self, forKey: .unknownWordIDs) ?? []
         savedWordIDs = try container.decodeIfPresent([String].self, forKey: .savedWordIDs) ?? []
         favoriteWordIDs = try container.decodeIfPresent([String].self, forKey: .favoriteWordIDs) ?? []
@@ -915,6 +1490,10 @@ struct AtlasProfile: Codable, Equatable {
         lastStudyDateKey = try container.decodeIfPresent(String.self, forKey: .lastStudyDateKey) ?? Self.todayKey()
         streak = try container.decodeIfPresent(Int.self, forKey: .streak) ?? 0
         xp = try container.decodeIfPresent(Int.self, forKey: .xp) ?? 0
+        energy = EnergyEngine.clamped(try container.decodeIfPresent(Int.self, forKey: .energy) ?? EnergyEngine.maxEnergy)
+        unlockedAchievementIDs = try container.decodeIfPresent([String].self, forKey: .unlockedAchievementIDs) ?? []
+        currentDailyPack = try container.decodeIfPresent(DailyPack.self, forKey: .currentDailyPack)
+        score0To160 = LearningLevel.legacyScore(fromAtlasScore: atlasScore)
         prepareForToday()
     }
 
@@ -923,9 +1502,17 @@ struct AtlasProfile: Codable, Equatable {
         try container.encode(appLanguage, forKey: .appLanguage)
         try container.encode(currentLevel, forKey: .currentLevel)
         try container.encode(score0To160, forKey: .score0To160)
+        try container.encode(atlasScore, forKey: .atlasScore)
+        try container.encodeIfPresent(placementResult, forKey: .placementResult)
+        try container.encode(skillScores, forKey: .skillScores)
+        try container.encode(weakSkills, forKey: .weakSkills)
+        try container.encode(strongSkills, forKey: .strongSkills)
+        try container.encodeIfPresent(lastPlacementAt, forKey: .lastPlacementAt)
         try container.encode(dailyGoal, forKey: .dailyGoal)
         try container.encodeIfPresent(voiceID, forKey: .voiceID)
         try container.encode(selectedTopics, forKey: .selectedTopics)
+        try container.encode(enabledPracticeSteps, forKey: .enabledPracticeSteps)
+        try container.encode(settings, forKey: .settings)
         try container.encode(unknownWordIDs, forKey: .unknownWordIDs)
         try container.encode(savedWordIDs, forKey: .savedWordIDs)
         try container.encode(favoriteWordIDs, forKey: .favoriteWordIDs)
@@ -936,10 +1523,16 @@ struct AtlasProfile: Codable, Equatable {
         try container.encode(lastStudyDateKey, forKey: .lastStudyDateKey)
         try container.encode(streak, forKey: .streak)
         try container.encode(xp, forKey: .xp)
+        try container.encode(energy, forKey: .energy)
+        try container.encode(unlockedAchievementIDs, forKey: .unlockedAchievementIDs)
+        try container.encodeIfPresent(currentDailyPack, forKey: .currentDailyPack)
     }
 
     var dailyWords: [WordEntry] {
-        WordBank.dailyWords(for: self)
+        let pack = currentDailyPack ?? WordSelectionEngine.dailyPack(for: self)
+        let wordsByID = Dictionary(uniqueKeysWithValues: WordBank.all.map { ($0.id, $0) })
+        let selected = pack.allWordIDs.compactMap { wordsByID[$0] }
+        return selected.isEmpty ? WordBank.dailyWords(for: self) : Array(selected.prefix(dailyGoal))
     }
 
     var selectedSpeechVoice: SpeechVoiceOption {
@@ -973,11 +1566,52 @@ struct AtlasProfile: Codable, Equatable {
         if lastStudyDateKey != today {
             completedTodayIDs = []
             lastStudyDateKey = today
+            currentDailyPack = nil
         }
 
         if dailyProgress[today] == nil {
             dailyProgress[today] = .empty(for: today)
         }
+
+        if currentDailyPack?.dateKey != today {
+            currentDailyPack = WordSelectionEngine.dailyPack(for: self)
+        }
+
+        syncSettings()
+    }
+
+    mutating func applyPlacementResult(_ result: PlacementResult) {
+        placementResult = result
+        atlasScore = max(0, min(result.atlasScore, 600))
+        score0To160 = LearningLevel.legacyScore(fromAtlasScore: atlasScore)
+        currentLevel = result.cefrLevel
+        skillScores = result.skillScores
+        weakSkills = result.weakSkills
+        strongSkills = result.strongSkills
+        lastPlacementAt = result.createdAt
+        dailyGoal = result.recommendedDailyGoal
+        selectedTopics = result.recommendedTopics
+        unknownWordIDs = Array(Set(unknownWordIDs + result.unknownWordIDs)).sorted()
+        currentDailyPack = WordSelectionEngine.dailyPack(for: self)
+        syncSettings()
+    }
+
+    mutating func applyAtlasScore(_ score: Int) {
+        atlasScore = max(0, min(score, 600))
+        score0To160 = LearningLevel.legacyScore(fromAtlasScore: atlasScore)
+        currentLevel = LearningLevel.from(atlasScore: atlasScore)
+    }
+
+    mutating func applyAtlasScoreDelta(_ delta: Int) {
+        guard delta != 0 else { return }
+        applyAtlasScore(atlasScore + delta)
+    }
+
+    mutating func syncSettings() {
+        settings.appLanguage = appLanguage
+        settings.dailyGoal = dailyGoal
+        settings.selectedTopics = selectedTopics
+        settings.preferredVoice = voiceID ?? .american
     }
 
     mutating func toggleSaved(_ id: String) {
@@ -999,7 +1633,7 @@ struct AtlasProfile: Codable, Equatable {
     }
 
     mutating func recordPractice(word: WordEntry, mode: PracticeMode, isCorrect: Bool) -> Int {
-        MemoryEngine.record(word: word, mode: mode, isCorrect: isCorrect, profile: &self)
+        MemoryEngineV2.record(word: word, mode: mode, isCorrect: isCorrect, profile: &self)
     }
 
     static func todayKey(date: Date = Date()) -> String {
@@ -1013,123 +1647,7 @@ struct AtlasProfile: Codable, Equatable {
 
 enum MemoryEngine {
     static func record(word: WordEntry, mode: PracticeMode, isCorrect: Bool, profile: inout AtlasProfile) -> Int {
-        profile.prepareForToday()
-
-        var memory = profile.wordProgress[word.id] ?? .fresh
-        let now = Date()
-        let xp = isCorrect ? mode.xpReward : 0
-
-        if isCorrect {
-            memory.correctCount += 1
-            memory.streak += 1
-            memory.mastery = min(100, memory.mastery + masteryGain(for: mode, streak: memory.streak))
-            memory.dueAt = Calendar.current.date(byAdding: .day, value: intervalDays(for: memory), to: now)
-            profile.markCompleted(word.id)
-            if memory.mastery >= 45 {
-                profile.unknownWordIDs.removeAll { $0 == word.id }
-            }
-            profile.score0To160 = min(160, profile.score0To160 + scoreDelta(for: word, current: profile.currentLevel))
-        } else {
-            memory.wrongCount += 1
-            memory.streak = 0
-            memory.mastery = max(0, memory.mastery - 18)
-            memory.dueAt = Calendar.current.date(byAdding: .hour, value: 18, to: now)
-            profile.addUnknown(word.id)
-            profile.score0To160 = max(0, profile.score0To160 - 1)
-        }
-
-        memory.lastPracticedAt = now
-        profile.wordProgress[word.id] = memory
-        profile.currentLevel = LearningLevel.from(score: profile.score0To160)
-        profile.xp += xp
-
-        let today = AtlasProfile.todayKey(date: now)
-        var daily = profile.dailyProgress[today] ?? .empty(for: today)
-        daily.xp += xp
-        daily.dueCountAtStart = max(daily.dueCountAtStart, profile.dueWordsCount)
-        if isCorrect {
-            daily.correct += 1
-            daily.completedWordIDs.appendUnique(word.id)
-        } else {
-            daily.wrong += 1
-        }
-        profile.dailyProgress[today] = daily
-
-        profile.practiceHistory.insert(
-            PracticeRecord(
-                id: UUID(),
-                date: now,
-                wordID: word.id,
-                wordEnglish: word.english,
-                mode: mode,
-                isCorrect: isCorrect,
-                xp: xp,
-                level: word.level
-            ),
-            at: 0
-        )
-
-        if profile.practiceHistory.count > 500 {
-            profile.practiceHistory = Array(profile.practiceHistory.prefix(500))
-        }
-
-        if isCorrect && profile.streak == 0 {
-            profile.streak = 1
-        } else if isCorrect && daily.correct == 1 {
-            profile.streak += 1
-        }
-
-        return xp
-    }
-
-    private static func intervalDays(for memory: WordMemory) -> Int {
-        switch memory.mastery {
-        case 0..<25: 1
-        case 25..<45: 2
-        case 45..<65: 4
-        case 65..<82: 7
-        case 82..<94: 14
-        default: 30
-        }
-    }
-
-    private static func masteryGain(for mode: PracticeMode, streak: Int) -> Int {
-        let streakBonus = min(streak, 3)
-
-        switch mode {
-        case .wordReveal:
-            return 5 + streakBonus
-        case .listenChoice:
-            return 7 + streakBonus
-        case .translateChoice:
-            return 9 + streakBonus
-        case .synonymMatch:
-            return 10 + streakBonus
-        case .clozeChoice:
-            return 10 + streakBonus
-        case .sentenceBuilder:
-            return 11 + streakBonus
-        case .sentenceCompose:
-            return 12 + streakBonus
-        case .meaningChoice:
-            return 8 + streakBonus
-        case .ruToEnglishTiles:
-            return 12 + streakBonus
-        case .listenTiles:
-            return 11 + streakBonus
-        case .clozeWord:
-            return 10 + streakBonus
-        case .wordOrder:
-            return 12 + streakBonus
-        case .speechRepeat:
-            return 10 + streakBonus
-        }
-    }
-
-    private static func scoreDelta(for word: WordEntry, current: LearningLevel) -> Int {
-        if word.level.order > current.order { return 3 }
-        if word.level.order == current.order { return 2 }
-        return 1
+        MemoryEngineV2.record(word: word, mode: mode, isCorrect: isCorrect, profile: &profile)
     }
 }
 
@@ -1176,55 +1694,16 @@ enum WordBank {
     }
 
     static func dailyWords(for profile: AtlasProfile) -> [WordEntry] {
-        let selectedTopics = Set(profile.selectedTopics)
-        let now = Date()
+        let pack = WordSelectionEngine.dailyPack(for: profile, words: all)
+        var result = pack.allWordIDs.compactMap { id in all.first { $0.id == id } }
 
-        let due = all.filter { word in
-            profile.wordProgress[word.id]?.isDue(on: now) == true
-        }
-
-        let unknown = profile.unknownWordIDs.compactMap { id in
-            all.first { $0.id == id }
-        }
-        let currentLevel = all.filter { word in
-            word.level.order <= profile.currentLevel.order &&
-                (selectedTopics.isEmpty || selectedTopics.contains(word.topic))
-        }
-        let stretch = all.filter { word in
-            word.level == profile.currentLevel.next &&
-                (selectedTopics.isEmpty || selectedTopics.contains(word.topic))
-        }
-        let saved = profile.savedWordIDs.compactMap { id in
-            all.first { $0.id == id }
-        }
-
-        let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 1
-        let streams = [
-            due.sorted { left, right in
-                (profile.wordProgress[left.id]?.mastery ?? 0) < (profile.wordProgress[right.id]?.mastery ?? 0)
-            },
-            unknown,
-            rotated(currentLevel, seed: day + profile.score0To160),
-            rotated(stretch, seed: day + 91),
-            saved
-        ]
-
-        var result: [WordEntry] = []
-        for stream in streams {
-            for word in stream {
-                guard !result.contains(where: { $0.id == word.id }) else { continue }
-                result.append(word)
-                if result.count == profile.dailyGoal { return result }
-            }
-        }
-
-        for word in rotated(all, seed: day) {
+        for word in rotated(all, seed: AtlasProfile.todayKey().hashValue + profile.atlasScore) {
             guard !result.contains(where: { $0.id == word.id }) else { continue }
             result.append(word)
             if result.count == profile.dailyGoal { break }
         }
 
-        return result
+        return Array(result.prefix(profile.dailyGoal))
     }
 
     static func assessmentWords(startingAt level: LearningLevel) -> [WordEntry] {
@@ -1271,10 +1750,19 @@ enum WordBank {
     }
 
     static func translationChoices(for word: WordEntry) -> [String] {
-        let pool = all
+        let closePool = all
+            .filter {
+                $0.id != word.id &&
+                    abs($0.level.order - word.level.order) <= 1 &&
+                    $0.hasReadableRussian &&
+                    ($0.partOfSpeech == word.partOfSpeech || $0.topic == word.topic)
+            }
+            .map(\.russian)
+        let fallbackPool = all
             .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 && $0.hasReadableRussian }
             .map(\.russian)
-        return choices(correct: word.russian, distractors: pool, seed: seed(for: word.id))
+
+        return choices(correct: word.russian, distractors: closePool.isEmpty ? fallbackPool : closePool, seed: seed(for: word.id))
     }
 
     static func englishChoices(for word: WordEntry) -> [String] {
@@ -1296,10 +1784,18 @@ enum WordBank {
     }
 
     static func clozeChoices(for word: WordEntry) -> [String] {
-        let pool = all
-            .filter { $0.id != word.id && $0.level == word.level }
+        let closePool = all
+            .filter {
+                $0.id != word.id &&
+                    abs($0.level.order - word.level.order) <= 1 &&
+                    $0.partOfSpeech == word.partOfSpeech
+            }
             .map(\.english)
-        return choices(correct: word.english, distractors: pool, seed: seed(for: word.id) + 89)
+        let fallbackPool = all
+            .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 }
+            .map(\.english)
+
+        return choices(correct: word.english, distractors: closePool.isEmpty ? fallbackPool : closePool, seed: seed(for: word.id) + 89)
     }
 
     static func sentenceTiles(for word: WordEntry) -> [String] {
@@ -1383,6 +1879,60 @@ enum WordBank {
         value.unicodeScalars.reduce(0) { partialResult, scalar in
             (partialResult + Int(scalar.value)) % 10_000
         }
+    }
+}
+
+enum PracticePlanner {
+    static func sessionWords(
+        from sourceWords: [WordEntry],
+        profile: AtlasProfile,
+        startWordID: WordEntry.ID?
+    ) -> [WordEntry] {
+        WordSelectionEngine.wordsForSession(
+            sourceWords: sourceWords,
+            profile: profile,
+            startWordID: startWordID
+        )
+    }
+
+    static func questions(for words: [WordEntry], profile: AtlasProfile) -> [PracticeQuestion] {
+        let plan = PracticeGameEngine.sessionPlan(words: words, profile: profile)
+        let questions = plan.tasks.map(PracticeQuestion.init(task:))
+        return questions.isEmpty ? [PracticeQuestion(wordID: WordBank.all[0].id, step: .meaningChoice)] : questions
+    }
+
+    private static func steps(for word: WordEntry, profile: AtlasProfile) -> [PracticeStep] {
+        let memory = profile.wordProgress[word.id]
+        let isUnknown = profile.unknownWordIDs.contains(word.id)
+        let isNew = memory == nil || memory?.totalAttempts == 0
+        let isWeak = isUnknown ||
+            memory?.isDue() == true ||
+            (memory?.wrongCount ?? 0) > 0 ||
+            ((memory?.totalAttempts ?? 0) > 0 && (memory?.mastery ?? 0) < 45)
+        let isStretch = word.level.order > profile.currentLevel.order
+        let isStrong = (memory?.mastery ?? 0) >= 70
+        let enabledSteps = profile.enabledPracticeSteps.isEmpty ? PracticeStep.allCases : profile.enabledPracticeSteps
+
+        func enabled(_ steps: [PracticeStep]) -> [PracticeStep] {
+            let filtered = steps.filter { enabledSteps.contains($0) }
+            return filtered.isEmpty ? [enabledSteps.first ?? .meaningChoice] : filtered
+        }
+
+        if isWeak || isNew {
+            return enabled([.meaningChoice, .ruToEnglishTiles, .clozeWord])
+        }
+
+        if isStrong || isStretch {
+            return enabled([.listenTiles, .wordOrder, .clozeWord, .speechRepeat])
+        }
+
+        return enabled([.meaningChoice, .listenTiles, .clozeWord, .wordOrder])
+    }
+
+    private static func isPracticeReady(_ word: WordEntry) -> Bool {
+        word.hasReadableRussian &&
+            word.english.rangeOfCharacter(from: .decimalDigits) == nil &&
+            !word.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

@@ -302,10 +302,10 @@ struct WordBankView: View {
             refreshDisplayedWords()
         }
         .fullScreenCover(item: $selectedPracticeWord) { word in
-            PracticeView(
+            LessonPlayerView(
                 profile: $profile,
-                words: [word],
-                startWordID: word.id
+                mode: .wordDrill,
+                selectedWord: word
             )
         }
     }

@@ -12,8 +12,13 @@ enum AtlasHaptics {
     private static let softImpactGenerator = UIImpactFeedbackGenerator(style: .soft)
     private static let selectionGenerator = UISelectionFeedbackGenerator()
     private static let notificationGenerator = UINotificationFeedbackGenerator()
+    private static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: "atlas.hapticsEnabled") as? Bool ?? true
+    }
 
     static func prepare() {
+        guard isEnabled else { return }
+
         lightImpactGenerator.prepare()
         mediumImpactGenerator.prepare()
         softImpactGenerator.prepare()
@@ -26,26 +31,36 @@ enum AtlasHaptics {
     }
 
     static func selection() {
+        guard isEnabled else { return }
+
         selectionGenerator.selectionChanged()
         selectionGenerator.prepare()
     }
 
     static func success() {
+        guard isEnabled else { return }
+
         notificationGenerator.notificationOccurred(.success)
         notificationGenerator.prepare()
     }
 
     static func warning() {
+        guard isEnabled else { return }
+
         notificationGenerator.notificationOccurred(.warning)
         notificationGenerator.prepare()
     }
 
     static func error() {
+        guard isEnabled else { return }
+
         notificationGenerator.notificationOccurred(.error)
         notificationGenerator.prepare()
     }
 
     static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .medium) {
+        guard isEnabled else { return }
+
         let generator: UIImpactFeedbackGenerator
 
         switch style {

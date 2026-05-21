@@ -14,9 +14,12 @@ struct HomeView: View {
     @State private var selectedWordID: WordEntry.ID?
     @State private var showsProfile = false
     @State private var showsPractice = false
+    @State private var showsLessonLauncher = false
     @State private var showsWordBank = false
     @State private var showsStats = false
     @State private var showsDailyProgress = false
+    @State private var selectedLessonMode: LessonMode = .daily
+    @State private var selectedLessonWord: WordEntry?
     @State private var selectedInfoWord: WordEntry?
     @State private var generatedExamples: [WordEntry.ID: GeneratedWordExample] = [:]
     @State private var generatingExampleIDs: Set<WordEntry.ID> = []
@@ -40,7 +43,7 @@ struct HomeView: View {
     private var dailyWordsRefreshToken: DailyWordsRefreshToken {
         DailyWordsRefreshToken(
             currentLevel: profile.currentLevel,
-            score: profile.score0To160,
+            score: profile.atlasScore,
             dailyGoal: profile.dailyGoal,
             selectedTopics: profile.selectedTopics,
             unknownWordIDs: profile.unknownWordIDs,
@@ -97,11 +100,24 @@ struct HomeView: View {
             )
         }
         .fullScreenCover(isPresented: $showsPractice) {
-            PracticeView(
+            LessonPlayerView(
                 profile: $profile,
-                words: dailyWords,
-                startWordID: currentWord.id
+                mode: selectedLessonMode,
+                selectedWord: selectedLessonWord
             )
+        }
+        .sheet(isPresented: $showsLessonLauncher) {
+            LessonLaunchView(
+                profile: $profile,
+                mode: selectedLessonMode,
+                selectedWord: selectedLessonWord
+            ) {
+                showsLessonLauncher = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    showsPractice = true
+                }
+            }
+            .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showsWordBank) {
             WordBankView(profile: $profile)
@@ -113,7 +129,7 @@ struct HomeView: View {
             DailyProgressView(profile: $profile) {
                 showsDailyProgress = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                    showsPractice = true
+                    openLessonLauncher(mode: .daily, word: nil)
                 }
             }
             .presentationDetents([.medium, .large])
@@ -177,7 +193,7 @@ struct HomeView: View {
                         HStack(spacing: 6) {
                             Text("\(profile.completedTodayCount)/\(profile.dailyGoal)")
                                 .font(.system(size: 16, weight: .black, design: .rounded))
-                            Text("\(profile.currentLevel.tag) \(profile.score0To160)")
+                            Text("\(profile.levelTag) \(profile.atlasScore)")
                                 .font(.system(size: 11, weight: .heavy, design: .rounded))
                                 .opacity(0.72)
                         }
@@ -310,10 +326,24 @@ struct HomeView: View {
                 selectedInfoWord = word
             }
 
-            homeIconButton(systemName: "checkmark.seal", size: 48) {
-                _ = profile.recordPractice(word: word, mode: .translateChoice, isCorrect: true)
-                nextWord(triggerHaptic: false)
+            Button {
+                openLessonLauncher(mode: .wordDrill, word: word)
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "target")
+                        .font(.system(size: 17, weight: .black))
+                    Text(profile.appLanguage.text(ru: "Отработать", en: "Drill"))
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
+                }
+                .foregroundStyle(.white)
+                .frame(width: 116, height: 48)
+                .background(Capsule().fill(AtlasColors.deepInk))
+                .overlay(Capsule().stroke(Color.white.opacity(0.16), lineWidth: 1.4))
+                .shadow(color: .black.opacity(0.24), radius: 12, y: 9)
             }
+            .buttonStyle(.plain)
 
             homeIconButton(
                 systemName: profile.favoriteWordIDs.contains(word.id) ? "heart.fill" : "heart",
@@ -361,36 +391,43 @@ struct HomeView: View {
     }
 
     private var bottomNavigation: some View {
-        HStack {
-            homeIconButton(systemName: "square.grid.2x2", size: 56) {
-                showsWordBank = true
+        VStack(spacing: 12) {
+            LessonPathView(profile: profile) { mode in
+                openLessonLauncher(mode: mode, word: nil)
             }
 
-            Spacer()
-
-            Button {
-                AtlasHaptics.tap()
-                showsPractice = true
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "graduationcap")
-                        .font(.system(size: 21, weight: .semibold))
-                    Text(profile.appLanguage.text(ru: "Тренировка", en: "Practice"))
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+            HStack {
+                homeIconButton(systemName: "square.grid.2x2", size: 56) {
+                    showsWordBank = true
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 20)
-                .frame(height: 54)
-                .background(Capsule().fill(AtlasColors.deepInk))
-                .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1.2))
-                .shadow(color: .black.opacity(0.24), radius: 14, y: 10)
-            }
-            .buttonStyle(.plain)
 
-            Spacer()
+                Spacer()
 
-            homeIconButton(systemName: "chart.bar", size: 56) {
-                showsStats = true
+                Button {
+                    openLessonLauncher(mode: .daily, word: nil)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "graduationcap")
+                            .font(.system(size: 21, weight: .semibold))
+                        Text(profile.appLanguage.text(ru: "Начать урок", en: "Start lesson"))
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.76)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .frame(height: 54)
+                    .background(Capsule().fill(AtlasColors.deepInk))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1.2))
+                    .shadow(color: .black.opacity(0.24), radius: 14, y: 10)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                homeIconButton(systemName: "chart.bar", size: 56) {
+                    showsStats = true
+                }
             }
         }
     }
@@ -427,6 +464,13 @@ struct HomeView: View {
         }
 
         scrollToWord(at: targetIndex)
+    }
+
+    private func openLessonLauncher(mode: LessonMode, word: WordEntry?) {
+        AtlasHaptics.tap()
+        selectedLessonMode = mode
+        selectedLessonWord = word
+        showsLessonLauncher = true
     }
 
     private func speak(_ word: WordEntry) {
