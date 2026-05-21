@@ -14,7 +14,7 @@ struct DailyPack: Codable, Equatable {
     let savedWords: [String]
     let bossWordIDs: [String]
 
-    var allWordIDs: [String] {
+    nonisolated var allWordIDs: [String] {
         var seen = Set<String>()
         var result: [String] = []
         for id in reviewWords + weakWords + newWords + stretchWords + savedWords + bossWordIDs where !seen.contains(id) {
@@ -26,24 +26,25 @@ struct DailyPack: Codable, Equatable {
 }
 
 enum WordSelectionEngine {
-    static func dailyPack(for profile: AtlasProfile, words: [WordEntry] = WordBank.all, now: Date = Date()) -> DailyPack {
+    nonisolated static func dailyPack(for profile: AtlasProfile, words: [WordEntry] = WordBank.all, now: Date = Date()) -> DailyPack {
         let goal = max(profile.dailyGoal, 1)
         let dateKey = AtlasProfile.todayKey(date: now)
-        let due = sortedCandidates(words, profile: profile, now: now) { word in
+        let rankedWords = rankedCandidates(words, profile: profile, now: now)
+        let due = rankedWords.filter { word in
             profile.wordProgress[word.id]?.isDue(on: now) == true
         }
-        let weak = sortedCandidates(words, profile: profile, now: now) { word in
+        let weak = rankedWords.filter { word in
             profile.unknownWordIDs.contains(word.id) ||
                 (profile.wordProgress[word.id]?.mastery ?? 100) < 40 ||
                 (profile.wordProgress[word.id]?.wrongCount ?? 0) > 0
         }
-        let current = sortedCandidates(words, profile: profile, now: now) { word in
+        let current = rankedWords.filter { word in
             word.level == profile.currentLevel && (profile.wordProgress[word.id]?.totalAttempts ?? 0) == 0
         }
-        let stretch = sortedCandidates(words, profile: profile, now: now) { word in
+        let stretch = rankedWords.filter { word in
             profile.settings.stretchModeEnabled && word.level == profile.currentLevel.next
         }
-        let saved = sortedCandidates(words, profile: profile, now: now) { word in
+        let saved = rankedWords.filter { word in
             profile.savedWordIDs.contains(word.id) || profile.favoriteWordIDs.contains(word.id)
         }
 
@@ -104,7 +105,7 @@ enum WordSelectionEngine {
         )
     }
 
-    static func wordsForSession(
+    nonisolated static func wordsForSession(
         sourceWords: [WordEntry],
         profile: AtlasProfile,
         startWordID: WordEntry.ID?,
@@ -143,7 +144,7 @@ enum WordSelectionEngine {
         return Array(result.prefix(targetCount))
     }
 
-    static func priority(for word: WordEntry, profile: AtlasProfile, now: Date = Date()) -> Double {
+    nonisolated static func priority(for word: WordEntry, profile: AtlasProfile, now: Date = Date()) -> Double {
         let memory = profile.wordProgress[word.id] ?? .fresh
         var score = 0.0
 
@@ -163,38 +164,52 @@ enum WordSelectionEngine {
         return score
     }
 
-    private static func sortedCandidates(
+    nonisolated private static func sortedCandidates(
         _ words: [WordEntry],
         profile: AtlasProfile,
         now: Date,
         where predicate: (WordEntry) -> Bool
     ) -> [WordEntry] {
-        words
-            .filter { isPracticeReady($0) && predicate($0) }
-            .sorted { left, right in
-                priority(for: left, profile: profile, now: now) > priority(for: right, profile: profile, now: now)
-            }
+        rankedCandidates(words, profile: profile, now: now)
+            .filter(predicate)
     }
 
-    private static func isPracticeReady(_ word: WordEntry) -> Bool {
+    nonisolated private static func rankedCandidates(
+        _ words: [WordEntry],
+        profile: AtlasProfile,
+        now: Date
+    ) -> [WordEntry] {
+        words
+            .filter(isPracticeReady)
+            .map { word in
+                (word: word, score: priority(for: word, profile: profile, now: now))
+            }
+            .sorted { left, right in
+                if left.score != right.score { return left.score > right.score }
+                return left.word.english.localizedCaseInsensitiveCompare(right.word.english) == .orderedAscending
+            }
+            .map(\.word)
+    }
+
+    nonisolated private static func isPracticeReady(_ word: WordEntry) -> Bool {
         word.hasReadableRussian &&
             word.english.rangeOfCharacter(from: .decimalDigits) == nil &&
             !word.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private static func levelFitScore(_ level: LearningLevel, _ current: LearningLevel) -> Double {
+    nonisolated private static func levelFitScore(_ level: LearningLevel, _ current: LearningLevel) -> Double {
         let distance = abs(level.order - current.order)
         if distance == 0 { return 35 }
         if level.order == current.order + 1 { return 18 }
         return -Double(distance * 16)
     }
 
-    private static func frequencyScore(_ rank: Int?) -> Double {
+    nonisolated private static func frequencyScore(_ rank: Int?) -> Double {
         guard let rank, rank > 0 else { return 0 }
         return max(0, 20 - log(Double(rank)))
     }
 
-    private static func recentlySeenPenalty(_ date: Date?, now: Date) -> Double {
+    nonisolated private static func recentlySeenPenalty(_ date: Date?, now: Date) -> Double {
         guard let date else { return 0 }
         let hours = now.timeIntervalSince(date) / 3600
         if hours < 2 { return 75 }
@@ -203,7 +218,7 @@ enum WordSelectionEngine {
         return 0
     }
 
-    private static func sameModeFatigue(_ modes: [PracticeMode]) -> Double {
+    nonisolated private static func sameModeFatigue(_ modes: [PracticeMode]) -> Double {
         guard let last = modes.last else { return 0 }
         return Double(modes.suffix(3).filter { $0 == last }.count * 8)
     }

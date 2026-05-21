@@ -25,13 +25,14 @@ struct HomeView: View {
     @State private var generatedExamples: [WordEntry.ID: GeneratedWordExample] = [:]
     @State private var generatingExampleIDs: Set<WordEntry.ID> = []
     @State private var cachedDailyWords: [WordEntry] = []
+    @State private var dailyWordsRefreshTask: Task<Void, Never>?
 
     private var dailyWords: [WordEntry] {
-        cachedDailyWords.isEmpty ? profile.dailyWords : cachedDailyWords
+        cachedDailyWords
     }
 
     private var currentWord: WordEntry {
-        guard !dailyWords.isEmpty else { return WordBank.all[0] }
+        guard !dailyWords.isEmpty else { return WordBank.placeholder }
 
         if let selectedWordID,
            let selectedWord = dailyWords.first(where: { $0.id == selectedWordID }) {
@@ -62,34 +63,41 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             PremiumHomeBackground()
-            wordPager
-                .ignoresSafeArea(.container, edges: .vertical)
+            if dailyWords.isEmpty {
+                HomeWordsLoadingView(language: profile.appLanguage)
+            } else {
+                wordPager
+                    .ignoresSafeArea(.container, edges: .vertical)
+            }
         }
         .safeAreaInset(edge: .top) {
             topBar
                 .padding(.horizontal, AtlasLayout.screenPadding)
                 .padding(.top, 8)
                 .padding(.bottom, 10)
-                .background(PremiumTopFade())
         }
         .safeAreaInset(edge: .bottom) {
             bottomNavigation
                 .padding(.horizontal, 16)
+                .padding(.top, 18)
                 .padding(.bottom, 8)
         }
         .onAppear {
             AtlasHaptics.prepare()
-            profile.prepareForToday()
             refreshDailyWords()
         }
         .onChange(of: dailyWordsRefreshToken) { _, _ in
             refreshDailyWords()
         }
         .task(id: currentWord.id) {
+            guard !dailyWords.isEmpty else { return }
             let word = currentWord
             try? await Task.sleep(nanoseconds: 320_000_000)
             guard !Task.isCancelled else { return }
             await generateExampleIfNeeded(for: word)
+        }
+        .onDisappear {
+            dailyWordsRefreshTask?.cancel()
         }
         .sheet(isPresented: $showsProfile) {
             ProfileView(
@@ -312,7 +320,7 @@ struct HomeView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(Color(red: 0.075, green: 0.075, blue: 0.08).opacity(0.94))
+                .fill(Color(red: 0.055, green: 0.055, blue: 0.06))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
@@ -426,11 +434,27 @@ struct HomeView: View {
     }
 
     private func refreshDailyWords() {
-        let words = WordBank.dailyWords(for: profile)
+        dailyWordsRefreshTask?.cancel()
+        let profileSnapshot = profile
 
-        withoutAnimation {
-            cachedDailyWords = words
-            alignSelectedWord()
+        dailyWordsRefreshTask = Task {
+            let prepared = await Task.detached(priority: .userInitiated) {
+                let allWords = WordBank.all
+                var profile = profileSnapshot
+                profile.prepareForToday(words: allWords)
+                let words = profile.dailyWords
+                return (profile, words.isEmpty ? [WordBank.placeholder] : words)
+            }.value
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                withoutAnimation {
+                    profile = prepared.0
+                    cachedDailyWords = prepared.1
+                    alignSelectedWord()
+                }
+            }
         }
     }
 
@@ -475,6 +499,24 @@ struct HomeView: View {
         withTransaction(transaction) {
             updates()
         }
+    }
+}
+
+private struct HomeWordsLoadingView: View {
+    let language: AppLanguage
+
+    var body: some View {
+        VStack(spacing: 13) {
+            ProgressView()
+                .controlSize(.large)
+                .tint(.white)
+
+            Text(language.text(ru: "Загружаем слова", en: "Loading words"))
+                .font(.system(size: 17, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.86))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .allowsHitTesting(false)
     }
 }
 

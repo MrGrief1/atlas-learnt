@@ -7,45 +7,48 @@ import SwiftUI
 
 struct PremiumHomeBackground: View {
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.06, green: 0.06, blue: 0.06),
-                    Color(red: 0.10, green: 0.10, blue: 0.10),
-                    Color(red: 0.04, green: 0.04, blue: 0.045)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+        LinearGradient(
+            colors: [
+                Color(red: 0.055, green: 0.055, blue: 0.06),
+                Color(red: 0.095, green: 0.098, blue: 0.098),
+                Color(red: 0.035, green: 0.035, blue: 0.04)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+}
 
-            Circle()
-                .fill(AtlasColors.mint.opacity(0.12))
-                .frame(width: 280, height: 280)
-                .blur(radius: 90)
-                .offset(x: -120, y: -120)
+struct PremiumEdgeBlur: View {
+    enum Position {
+        case top
+        case bottom
+    }
 
-            Circle()
-                .fill(Color.white.opacity(0.055))
-                .frame(width: 340, height: 340)
-                .blur(radius: 110)
-                .offset(x: 170, y: 170)
-        }
+    let position: Position
+
+    var body: some View {
+        edgeGradient
+            .allowsHitTesting(false)
+    }
+
+    private var edgeGradient: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color(red: 0.16, green: 0.16, blue: 0.17), location: 0),
+                .init(color: Color(red: 0.12, green: 0.12, blue: 0.13), location: 0.55),
+                .init(color: Color(red: 0.09, green: 0.09, blue: 0.10), location: 1)
+            ],
+            startPoint: position == .top ? .top : .bottom,
+            endPoint: position == .top ? .bottom : .top
+        )
     }
 }
 
 struct PremiumTopFade: View {
     var body: some View {
-        LinearGradient(
-            stops: [
-                .init(color: Color.black.opacity(0.88), location: 0),
-                .init(color: Color.black.opacity(0.66), location: 0.72),
-                .init(color: Color.black.opacity(0.0), location: 1)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea(edges: .top)
+        PremiumEdgeBlur(position: .top)
     }
 }
 
@@ -166,36 +169,34 @@ struct PremiumWordHeroView: View {
     }
 
     private var actionChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                PremiumActionChip(
-                    icon: "info",
-                    title: language.text(ru: "Инфо", en: "Info"),
-                    action: showInfo
-                )
+        HStack(spacing: 14) {
+            PremiumActionChip(
+                icon: "info",
+                title: language.text(ru: "Инфо", en: "Info"),
+                action: showInfo
+            )
 
-                PremiumActionChip(
-                    icon: "target",
-                    title: language.text(ru: "Отработать", en: "Drill"),
-                    isPrimary: true,
-                    action: drill
-                )
+            PremiumActionChip(
+                icon: "target",
+                title: language.text(ru: "Отработать", en: "Drill"),
+                isPrimary: true,
+                action: drill
+            )
 
-                PremiumActionChip(
-                    icon: isFavorite ? "heart.fill" : "heart",
-                    title: language.text(ru: "Любимое", en: "Favorite"),
-                    foreground: isFavorite ? AtlasColors.coral : .white,
-                    action: toggleFavorite
-                )
+            PremiumActionChip(
+                icon: isFavorite ? "heart.fill" : "heart",
+                title: language.text(ru: "Любимое", en: "Favorite"),
+                foreground: isFavorite ? AtlasColors.coral : .white,
+                action: toggleFavorite
+            )
 
-                PremiumActionChip(
-                    icon: isSaved ? "bookmark.fill" : "bookmark",
-                    title: language.text(ru: "Сохранить", en: "Save"),
-                    action: toggleSaved
-                )
-            }
-            .padding(.horizontal, 2)
+            PremiumActionChip(
+                icon: isSaved ? "bookmark.fill" : "bookmark",
+                title: language.text(ru: "Сохранить", en: "Save"),
+                action: toggleSaved
+            )
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -211,27 +212,21 @@ private struct PremiumActionChip: View {
             AtlasHaptics.tap()
             action()
         } label: {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .black))
-
-                Text(title)
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .lineLimit(1)
-            }
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .black))
+                .frame(width: 54, height: 54)
             .foregroundStyle(isPrimary ? .black : foreground)
-            .padding(.horizontal, 13)
-            .frame(height: 38)
             .background(
-                Capsule()
+                Circle()
                     .fill(isPrimary ? AtlasColors.mint : Color.white.opacity(0.09))
             )
             .overlay(
-                Capsule()
+                Circle()
                     .stroke(isPrimary ? Color.black.opacity(0.72) : Color.white.opacity(0.13), lineWidth: 1.2)
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
 

@@ -101,7 +101,7 @@ enum LessonEngine {
         _ result: LessonTaskResult,
         profile: inout AtlasProfile
     ) {
-        let word = result.wordID.flatMap { id in WordBank.all.first { $0.id == id } }
+        let word = result.wordID.flatMap(WordBank.word)
         MasteryEngine.apply(result: result, word: word, profile: &profile)
     }
 
@@ -350,7 +350,7 @@ enum LessonEngine {
 
     private static func pickNewWords(profile: AtlasProfile, count: Int) -> [WordEntry] {
         let pack = WordSelectionEngine.dailyPack(for: profile)
-        let packed = pack.newWords.compactMap { id in WordBank.all.first { $0.id == id } }
+        let packed = WordBank.words(withIDs: pack.newWords)
         let fallback = WordBank.all
             .filter { ($0.level == profile.currentLevel || $0.level == profile.currentLevel.next) && (profile.wordProgress[$0.id]?.totalAttempts ?? 0) == 0 }
             .sorted { WordSelectionEngine.priority(for: $0, profile: profile) > WordSelectionEngine.priority(for: $1, profile: profile) }
@@ -359,7 +359,7 @@ enum LessonEngine {
 
     private static func pickDueWords(profile: AtlasProfile, count: Int) -> [WordEntry] {
         let pack = WordSelectionEngine.dailyPack(for: profile)
-        let packed = pack.reviewWords.compactMap { id in WordBank.all.first { $0.id == id } }
+        let packed = WordBank.words(withIDs: pack.reviewWords)
         let fallback = WordBank.all
             .filter { profile.wordProgress[$0.id]?.isDue() == true }
             .sorted { WordSelectionEngine.priority(for: $0, profile: profile) > WordSelectionEngine.priority(for: $1, profile: profile) }
@@ -368,14 +368,14 @@ enum LessonEngine {
 
     private static func pickWeakWords(profile: AtlasProfile, count: Int) -> [WordEntry] {
         let pack = WordSelectionEngine.dailyPack(for: profile)
-        let packed = pack.weakWords.compactMap { id in WordBank.all.first { $0.id == id } }
-        let fallback = profile.weakWordIDs.compactMap { id in WordBank.all.first { $0.id == id } }
+        let packed = WordBank.words(withIDs: pack.weakWords)
+        let fallback = WordBank.words(withIDs: profile.weakWordIDs)
         return Array((packed + fallback + WordBank.dailyWords(for: profile)).uniquedByID().prefix(count))
     }
 
     private static func pickBossWords(profile: AtlasProfile, count: Int) -> [WordEntry] {
         let pack = WordSelectionEngine.dailyPack(for: profile)
-        let packed = pack.bossWordIDs.compactMap { id in WordBank.all.first { $0.id == id } }
+        let packed = WordBank.words(withIDs: pack.bossWordIDs)
         return Array((packed + pickWeakWords(profile: profile, count: count) + pickDueWords(profile: profile, count: count)).uniquedByID().prefix(count))
     }
 

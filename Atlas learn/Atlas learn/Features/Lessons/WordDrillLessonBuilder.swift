@@ -7,7 +7,7 @@ import Foundation
 
 enum WordDrillLessonBuilder {
     static func build(profile: AtlasProfile, selectedWord: WordEntry?) -> LessonRun {
-        let word = selectedWord ?? WordBank.dailyWords(for: profile).first ?? WordBank.all[0]
+        let word = selectedWord ?? WordBank.dailyWords(for: profile).first ?? WordBank.placeholder
         let memory = profile.wordProgress[word.id] ?? .fresh
 
         let types = AdaptiveLessonPlanner.taskTypes(

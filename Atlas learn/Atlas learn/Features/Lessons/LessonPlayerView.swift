@@ -47,7 +47,7 @@ struct LessonPlayerView: View {
 
     private var currentWord: WordEntry? {
         guard let wordID = currentTask?.wordID else { return nil }
-        return WordBank.all.first { $0.id == wordID }
+        return WordBank.word(withID: wordID)
     }
 
     var body: some View {
@@ -139,7 +139,7 @@ struct LessonPlayerView: View {
     }
 
     private func taskContent(_ task: LessonTask) -> AnyView {
-        let word = currentWord ?? WordBank.all[0]
+        let word = currentWord ?? WordBank.placeholder
         let audioAction: (() -> Void)? = task.audioText == nil ? nil : { playCurrentAudio() }
 
         if task.type == .introCard {
@@ -436,7 +436,7 @@ struct LessonPlayerView: View {
 
         if let dueIndex = currentRun.mistakeQueue.firstIndex(where: { $0.returnAfterTasks <= 0 }) {
             let mistake = currentRun.mistakeQueue.remove(at: dueIndex)
-            if let word = WordBank.all.first(where: { $0.id == mistake.wordID }) {
+            if let word = WordBank.word(withID: mistake.wordID) {
                 let clinic = MistakeClinicEngine.clinicTask(for: mistake, word: word)
                 currentRun.tasks.insert(clinic, at: min(nextIndex, currentRun.tasks.count))
             }
@@ -472,7 +472,7 @@ struct LessonPlayerView: View {
 
     private func restartWeakWordDrill() {
         let weakID = run?.weakWordIDs.first ?? profile.weakWordIDs.first ?? run?.targetWordIDs.first
-        let word = weakID.flatMap { id in WordBank.all.first { $0.id == id } }
+        let word = weakID.flatMap(WordBank.word)
         startNewLesson(mode: .wordDrill, selectedWord: word)
     }
 

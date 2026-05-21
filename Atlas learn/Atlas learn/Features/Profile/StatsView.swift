@@ -10,6 +10,7 @@ struct DailyProgressView: View {
 
     @Binding var profile: AtlasProfile
     let continueAction: () -> Void
+    @State private var prepareTask: Task<Void, Never>?
 
     private var language: AppLanguage { profile.appLanguage }
     private var today: DailyProgress { profile.dailyProgress[AtlasProfile.todayKey()] ?? .empty(for: AtlasProfile.todayKey()) }
@@ -97,7 +98,10 @@ struct DailyProgressView: View {
             .padding(.horizontal, AtlasLayout.screenPadding)
             .padding(.top, 22)
         }
-        .onAppear { profile.prepareForToday() }
+        .onAppear(perform: prepareToday)
+        .onDisappear {
+            prepareTask?.cancel()
+        }
     }
 
     private func dailyMetric(icon: String, title: String, value: String) -> some View {
@@ -120,6 +124,25 @@ struct DailyProgressView: View {
                 .stroke(AtlasColors.line, lineWidth: 1.8)
         )
     }
+
+    private func prepareToday() {
+        prepareTask?.cancel()
+        let profileSnapshot = profile
+        prepareTask = Task {
+            let prepared = await Task.detached(priority: .userInitiated) {
+                let words = WordBank.all
+                var profile = profileSnapshot
+                profile.prepareForToday(words: words)
+                return profile
+            }.value
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                profile = prepared
+            }
+        }
+    }
 }
 
 struct StatsView: View {
@@ -139,7 +162,7 @@ struct StatsView: View {
     }
     private var weakWords: [WordEntry] {
         Array(profile.weakWordIDs.compactMap { id in
-            WordBank.all.first { $0.id == id }
+            WordBank.word(withID: id)
         }.prefix(6))
     }
     private var nextReviewTitle: String {
@@ -324,12 +347,12 @@ struct StatsView: View {
     }
 
     private var levelDistribution: some View {
-        VStack(spacing: 11) {
+        let masteredCounts = WordBank.masteredCountsByLevel(for: profile.wordProgress)
+
+        return VStack(spacing: 11) {
             ForEach(LearningLevel.allCases) { level in
-                let mastered = profile.wordProgress.filter { entry in
-                    WordBank.all.first { $0.id == entry.key }?.level == level && entry.value.mastery >= 70
-                }.count
-                let total = WordBank.all.filter { $0.level == level }.count
+                let mastered = masteredCounts[level] ?? 0
+                let total = WordBank.levelCounts[level] ?? 0
                 levelBar(level: level, mastered: mastered, total: total)
             }
         }

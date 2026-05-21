@@ -26,7 +26,7 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    func text(ru: String, en: String) -> String {
+    nonisolated func text(ru: String, en: String) -> String {
         self == .russian ? ru : en
     }
 }
@@ -41,7 +41,7 @@ enum LearningLevel: String, CaseIterable, Codable, Identifiable, Comparable {
 
     var id: String { rawValue }
 
-    var order: Int {
+    nonisolated var order: Int {
         switch self {
         case .a1: 0
         case .a2: 1
@@ -126,11 +126,11 @@ enum LearningLevel: String, CaseIterable, Codable, Identifiable, Comparable {
         }
     }
 
-    var next: LearningLevel {
+    nonisolated var next: LearningLevel {
         LearningLevel.allCases[min(order + 1, LearningLevel.allCases.count - 1)]
     }
 
-    static func < (lhs: LearningLevel, rhs: LearningLevel) -> Bool {
+    nonisolated static func < (lhs: LearningLevel, rhs: LearningLevel) -> Bool {
         lhs.order < rhs.order
     }
 
@@ -626,7 +626,7 @@ struct WordEntry: Codable, Hashable, Identifiable {
 
     var cefrLevel: LearningLevel { level }
 
-    var hasReadableRussian: Bool {
+    nonisolated var hasReadableRussian: Bool {
         !russian.localizedCaseInsensitiveContains("учебное слово:") &&
             russian.range(of: #"\p{Cyrillic}"#, options: .regularExpression) != nil
     }
@@ -802,7 +802,7 @@ struct WordEntry: Codable, Hashable, Identifiable {
         return collapsed.isEmpty ? "word" : collapsed
     }
 
-    init(
+    nonisolated init(
         id: String,
         lemma: String? = nil,
         english: String,
@@ -1293,7 +1293,7 @@ struct WordMemory: Codable, Equatable {
     var boredomScore: Double
     var personalRelevance: Double
 
-    static let fresh = WordMemory(
+    nonisolated static let fresh = WordMemory(
         exposures: 0,
         correctCount: 0,
         wrongCount: 0,
@@ -1387,14 +1387,14 @@ struct WordMemory: Codable, Equatable {
         personalRelevance = try container.decodeIfPresent(Double.self, forKey: .personalRelevance) ?? 0
     }
 
-    var totalAttempts: Int { correctCount + wrongCount }
+    nonisolated var totalAttempts: Int { correctCount + wrongCount }
 
-    var accuracy: Double {
+    nonisolated var accuracy: Double {
         guard totalAttempts > 0 else { return 0 }
         return Double(correctCount) / Double(totalAttempts)
     }
 
-    func isDue(on date: Date = Date()) -> Bool {
+    nonisolated func isDue(on date: Date = Date()) -> Bool {
         guard let dueAt else { return totalAttempts > 0 && mastery < 60 }
         return dueAt <= date
     }
@@ -1409,7 +1409,7 @@ struct DailyProgress: Codable, Equatable, Identifiable {
     var wrong: Int
     var dueCountAtStart: Int
 
-    static func empty(for dateKey: String) -> DailyProgress {
+    nonisolated static func empty(for dateKey: String) -> DailyProgress {
         DailyProgress(dateKey: dateKey, completedWordIDs: [], xp: 0, correct: 0, wrong: 0, dueCountAtStart: 0)
     }
 
@@ -1570,7 +1570,7 @@ struct AtlasProfile: Codable, Equatable {
         self.unlockedAchievementIDs = unlockedAchievementIDs
         self.currentDailyPack = currentDailyPack
         self.score0To160 = LearningLevel.legacyScore(fromAtlasScore: self.atlasScore)
-        prepareForToday()
+        syncSettings()
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1648,10 +1648,10 @@ struct AtlasProfile: Codable, Equatable {
         unlockedAchievementIDs = try container.decodeIfPresent([String].self, forKey: .unlockedAchievementIDs) ?? []
         currentDailyPack = try container.decodeIfPresent(DailyPack.self, forKey: .currentDailyPack)
         score0To160 = LearningLevel.legacyScore(fromAtlasScore: atlasScore)
-        prepareForToday()
+        syncSettings()
     }
 
-    func encode(to encoder: Encoder) throws {
+    nonisolated func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(appLanguage, forKey: .appLanguage)
         try container.encode(currentLevel, forKey: .currentLevel)
@@ -1682,10 +1682,9 @@ struct AtlasProfile: Codable, Equatable {
         try container.encodeIfPresent(currentDailyPack, forKey: .currentDailyPack)
     }
 
-    var dailyWords: [WordEntry] {
+    nonisolated var dailyWords: [WordEntry] {
         let pack = currentDailyPack ?? WordSelectionEngine.dailyPack(for: self)
-        let wordsByID = Dictionary(uniqueKeysWithValues: WordBank.all.map { ($0.id, $0) })
-        let selected = pack.allWordIDs.compactMap { wordsByID[$0] }
+        let selected = WordBank.words(withIDs: pack.allWordIDs)
         return selected.isEmpty ? WordBank.dailyWords(for: self) : Array(selected.prefix(dailyGoal))
     }
 
@@ -1697,8 +1696,8 @@ struct AtlasProfile: Codable, Equatable {
         dailyProgress[Self.todayKey()]?.completedWordIDs.count ?? completedTodayIDs.count
     }
 
-    var dueWordsCount: Int {
-        WordBank.all.filter { wordProgress[$0.id]?.isDue() == true }.count
+    nonisolated var dueWordsCount: Int {
+        wordProgress.values.filter { $0.isDue() }.count
     }
 
     var weakWordIDs: [String] {
@@ -1715,7 +1714,7 @@ struct AtlasProfile: Codable, Equatable {
         return Double(correct) / Double(correct + wrong)
     }
 
-    mutating func prepareForToday() {
+    nonisolated mutating func prepareForToday(words: [WordEntry]) {
         let today = Self.todayKey()
         if lastStudyDateKey != today {
             completedTodayIDs = []
@@ -1723,15 +1722,19 @@ struct AtlasProfile: Codable, Equatable {
             currentDailyPack = nil
         }
 
-        if dailyProgress[today] == nil {
+        if !dailyProgress.keys.contains(today) {
             dailyProgress[today] = .empty(for: today)
         }
 
         if currentDailyPack?.dateKey != today {
-            currentDailyPack = WordSelectionEngine.dailyPack(for: self)
+            currentDailyPack = WordSelectionEngine.dailyPack(for: self, words: words)
         }
 
         syncSettings()
+    }
+
+    nonisolated mutating func prepareForToday() {
+        prepareForToday(words: WordBank.all)
     }
 
     mutating func applyPlacementResult(_ result: PlacementResult) {
@@ -1761,7 +1764,7 @@ struct AtlasProfile: Codable, Equatable {
         applyAtlasScore(atlasScore + delta)
     }
 
-    mutating func syncSettings() {
+    nonisolated mutating func syncSettings() {
         settings.appLanguage = appLanguage
         settings.dailyGoal = dailyGoal
         settings.selectedTopics = selectedTopics
@@ -1790,7 +1793,7 @@ struct AtlasProfile: Codable, Equatable {
         MemoryEngineV2.record(word: word, mode: mode, isCorrect: isCorrect, profile: &self)
     }
 
-    static func todayKey(date: Date = Date()) -> String {
+    nonisolated static func todayKey(date: Date = Date()) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1820,14 +1823,27 @@ extension Array where Element: Equatable {
     }
 }
 
-private struct WordBankPayload: Decodable {
-    let entries: [WordEntry]
-}
-
 enum WordBank {
-    static let topics = ["Everyday", "Work", "Study", "Emotions", "Travel", "Business", "Health", "Tech", "Culture", "Nature"]
+    nonisolated static let topics = ["Everyday", "Work", "Study", "Emotions", "Travel", "Business", "Health", "Tech", "Culture", "Nature"]
 
-    static let all: [WordEntry] = {
+    nonisolated static let placeholder = WordEntry(
+        id: "atlas-placeholder",
+        english: "focus",
+        russian: "фокус",
+        partOfSpeech: "noun",
+        ipa: "/focus/",
+        definitionEN: "Keep attention on one useful word.",
+        definitionRU: "Сфокусируйся на одном полезном слове.",
+        exampleEN: "I can focus for a minute.",
+        exampleRU: "Я могу сфокусироваться на минуту.",
+        level: .a1,
+        topic: "Study",
+        synonyms: ["attention"],
+        sentenceTiles: ["I", "can", "focus", "today"],
+        clozeSentence: "I can ____ today."
+    )
+
+    nonisolated static let all: [WordEntry] = {
         if let loaded = loadBundledWords(), !loaded.isEmpty {
             return loaded
         }
@@ -1835,7 +1851,46 @@ enum WordBank {
         return fallbackWords()
     }()
 
-    static func topicTitle(_ topic: String, for language: AppLanguage) -> String {
+    nonisolated static let allByID: [String: WordEntry] = {
+        var result: [String: WordEntry] = [:]
+        result.reserveCapacity(all.count)
+        for word in all {
+            result[word.id] = word
+        }
+        return result
+    }()
+
+    nonisolated static let levelCounts: [LearningLevel: Int] = {
+        Dictionary(grouping: all, by: \.level).mapValues(\.count)
+    }()
+
+    nonisolated static let searchableTextByID: [String: String] = {
+        var result: [String: String] = [:]
+        result.reserveCapacity(all.count)
+        for word in all {
+            result[word.id] = "\(word.english) \(word.russian) \(word.partOfSpeech) \(word.topic)".lowercased()
+        }
+        return result
+    }()
+
+    nonisolated static let numericSuffixByID: [String: Int] = {
+        var result: [String: Int] = [:]
+        result.reserveCapacity(all.count)
+        for word in all {
+            result[word.id] = Int(word.id.split(separator: "-").last ?? "") ?? 0
+        }
+        return result
+    }()
+
+    nonisolated static func word(withID id: String) -> WordEntry? {
+        allByID[id]
+    }
+
+    nonisolated static func words(withIDs ids: [String]) -> [WordEntry] {
+        ids.compactMap { allByID[$0] }
+    }
+
+    nonisolated static func topicTitle(_ topic: String, for language: AppLanguage) -> String {
         switch topic {
         case "Everyday": language.text(ru: "Каждый день", en: "Everyday")
         case "Work": language.text(ru: "Работа", en: "Work")
@@ -1851,31 +1906,54 @@ enum WordBank {
         }
     }
 
-    static func dailyWords(for profile: AtlasProfile) -> [WordEntry] {
-        let pack = WordSelectionEngine.dailyPack(for: profile, words: all)
-        var result = pack.allWordIDs.compactMap { id in all.first { $0.id == id } }
+    nonisolated static func dailyWords(for profile: AtlasProfile) -> [WordEntry] {
+        let words = all
+        let goal = max(profile.dailyGoal, 1)
+        let pack = WordSelectionEngine.dailyPack(for: profile, words: words)
+        var result = WordBank.words(withIDs: pack.allWordIDs)
+        var usedIDs = Set(result.map(\.id))
 
-        for word in rotated(all, seed: AtlasProfile.todayKey().hashValue + profile.atlasScore) {
-            guard !result.contains(where: { $0.id == word.id }) else { continue }
-            result.append(word)
-            if result.count == profile.dailyGoal { break }
+        if !words.isEmpty {
+            let seed = AtlasProfile.todayKey().hashValue + profile.atlasScore
+            let offset = abs(seed) % words.count
+            for step in 0..<words.count {
+                let word = words[(offset + step) % words.count]
+                guard !usedIDs.contains(word.id) else { continue }
+                usedIDs.insert(word.id)
+                result.append(word)
+                if result.count == goal { break }
+            }
         }
 
-        return Array(result.prefix(profile.dailyGoal))
+        if result.isEmpty {
+            result.append(placeholder)
+        }
+
+        return Array(result.prefix(goal))
     }
 
-    static func assessmentWords(startingAt level: LearningLevel) -> [WordEntry] {
+    nonisolated static func masteredCountsByLevel(for memories: [String: WordMemory]) -> [LearningLevel: Int] {
+        var counts: [LearningLevel: Int] = [:]
+        for (id, memory) in memories where memory.mastery >= 70 {
+            guard let level = allByID[id]?.level else { continue }
+            counts[level, default: 0] += 1
+        }
+
+        return counts
+    }
+
+    nonisolated static func assessmentWords(startingAt level: LearningLevel) -> [WordEntry] {
         let desiredLevels = LearningLevel.allCases
         let primary = all.filter { abs($0.level.order - level.order) <= 1 && isAssessmentReady($0) }
         let broader = desiredLevels.flatMap { level in all.filter { $0.level == level && isAssessmentReady($0) }.prefix(6) }
         return Array((primary + broader).uniquedByID().prefix(30))
     }
 
-    static var assessmentWords: [WordEntry] {
+    nonisolated static var assessmentWords: [WordEntry] {
         assessmentWords(startingAt: .a2)
     }
 
-    static func isAssessmentReady(_ word: WordEntry) -> Bool {
+    nonisolated static func isAssessmentReady(_ word: WordEntry) -> Bool {
         let english = word.english.lowercased()
         let blockedPartsOfSpeech: Set<String> = [
             "article",
@@ -1907,7 +1985,7 @@ enum WordBank {
             english.count >= 4
     }
 
-    static func translationChoices(for word: WordEntry) -> [String] {
+    nonisolated static func translationChoices(for word: WordEntry) -> [String] {
         let closePool = all
             .filter {
                 $0.id != word.id &&
@@ -1923,7 +2001,7 @@ enum WordBank {
         return choices(correct: word.russian, distractors: closePool.isEmpty ? fallbackPool : closePool, seed: seed(for: word.id))
     }
 
-    static func englishChoices(for word: WordEntry) -> [String] {
+    nonisolated static func englishChoices(for word: WordEntry) -> [String] {
         let pool = all
             .filter { $0.id != word.id && abs($0.level.order - word.level.order) <= 1 && $0.partOfSpeech == word.partOfSpeech }
             .map(\.english)
@@ -1933,7 +2011,7 @@ enum WordBank {
         return choices(correct: word.english, distractors: pool.isEmpty ? fallback : pool, seed: seed(for: word.id) + 31)
     }
 
-    static func synonymChoices(for word: WordEntry) -> [String] {
+    nonisolated static func synonymChoices(for word: WordEntry) -> [String] {
         let correct = word.synonyms.first ?? "no exact synonym"
         let pool = all
             .filter { $0.id != word.id && $0.partOfSpeech == word.partOfSpeech }
@@ -1941,7 +2019,7 @@ enum WordBank {
         return choices(correct: correct, distractors: pool, seed: seed(for: word.english) + 47)
     }
 
-    static func clozeChoices(for word: WordEntry) -> [String] {
+    nonisolated static func clozeChoices(for word: WordEntry) -> [String] {
         let closePool = all
             .filter {
                 $0.id != word.id &&
@@ -1956,18 +2034,18 @@ enum WordBank {
         return choices(correct: word.english, distractors: closePool.isEmpty ? fallbackPool : closePool, seed: seed(for: word.id) + 89)
     }
 
-    static func sentenceTiles(for word: WordEntry) -> [String] {
+    nonisolated static func sentenceTiles(for word: WordEntry) -> [String] {
         let tiles = word.sentenceTiles.isEmpty ? word.exampleEN.split(separator: " ").map(String.init) : word.sentenceTiles
         return rotated(tiles, seed: seed(for: word.id) + 19)
     }
 
-    static func sentenceAnswer(for word: WordEntry) -> String {
+    nonisolated static func sentenceAnswer(for word: WordEntry) -> String {
         (word.sentenceTiles.isEmpty ? word.exampleEN.split(separator: " ").map(String.init) : word.sentenceTiles)
             .joined(separator: " ")
             .trimmingCharacters(in: .punctuationCharacters)
     }
 
-    private static func choices(correct: String, distractors: [String], seed: Int) -> [String] {
+    nonisolated private static func choices(correct: String, distractors: [String], seed: Int) -> [String] {
         let cleanPool = Array(Set(distractors.filter { !$0.isEmpty && $0 != correct })).sorted()
         var result = Array(rotated(cleanPool, seed: seed).prefix(3))
         let insertIndex = result.isEmpty ? 0 : abs(seed) % (result.count + 1)
@@ -1975,7 +2053,7 @@ enum WordBank {
         return Array(result.prefix(4))
     }
 
-    private static func loadBundledWords() -> [WordEntry]? {
+    nonisolated private static func loadBundledWords() -> [WordEntry]? {
         guard let url = Bundle.main.url(forResource: "WordBank", withExtension: "json"),
               let data = try? Data(contentsOf: url)
         else {
@@ -1988,14 +2066,18 @@ enum WordBank {
             return decoded
         }
 
-        if let decoded = try? decoder.decode(WordBankPayload.self, from: data) {
-            return decoded.entries
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let entriesObject = object["entries"],
+           JSONSerialization.isValidJSONObject(entriesObject),
+           let entriesData = try? JSONSerialization.data(withJSONObject: entriesObject),
+           let decoded = try? decoder.decode([WordEntry].self, from: entriesData) {
+            return decoded
         }
 
         return nil
     }
 
-    private static func fallbackWords() -> [WordEntry] {
+    nonisolated private static func fallbackWords() -> [WordEntry] {
         [
             w("focus", "focus", "фокус", "noun", .a1, "Study", ["attention"]),
             w("goal", "goal", "цель", "noun", .a1, "Everyday", ["aim"]),
@@ -2009,7 +2091,7 @@ enum WordBank {
         ]
     }
 
-    private static func w(
+    nonisolated private static func w(
         _ id: String,
         _ english: String,
         _ russian: String,
@@ -2036,13 +2118,13 @@ enum WordBank {
         )
     }
 
-    static func rotated<T>(_ items: [T], seed: Int) -> [T] {
+    nonisolated static func rotated<T>(_ items: [T], seed: Int) -> [T] {
         guard !items.isEmpty else { return [] }
         let offset = abs(seed) % items.count
         return Array(items[offset..<items.count]) + Array(items[0..<offset])
     }
 
-    static func seed(for value: String) -> Int {
+    nonisolated static func seed(for value: String) -> Int {
         value.unicodeScalars.reduce(0) { partialResult, scalar in
             (partialResult + Int(scalar.value)) % 10_000
         }
@@ -2065,7 +2147,7 @@ enum PracticePlanner {
     static func questions(for words: [WordEntry], profile: AtlasProfile) -> [PracticeQuestion] {
         let plan = PracticeGameEngine.sessionPlan(words: words, profile: profile)
         let questions = plan.tasks.map(PracticeQuestion.init(task:))
-        return questions.isEmpty ? [PracticeQuestion(wordID: WordBank.all[0].id, step: .meaningChoice)] : questions
+        return questions.isEmpty ? [PracticeQuestion(wordID: WordBank.placeholder.id, step: .meaningChoice)] : questions
     }
 
     private static func steps(for word: WordEntry, profile: AtlasProfile) -> [PracticeStep] {
@@ -2104,7 +2186,7 @@ enum PracticePlanner {
 }
 
 extension Array where Element == WordEntry {
-    func uniquedByID() -> [WordEntry] {
+    nonisolated func uniquedByID() -> [WordEntry] {
         var seen = Set<String>()
         var result: [WordEntry] = []
 

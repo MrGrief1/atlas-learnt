@@ -36,7 +36,7 @@ struct OnboardingView: View {
         let fallback = WordBank.all.filter { $0.level == currentAssessmentLevel && WordBank.isAssessmentReady($0) }
         return WordBank.rotated(levelWords.isEmpty ? fallback : levelWords, seed: adaptiveScore + quizIndex * 13).first
             ?? WordBank.assessmentWords.first
-            ?? WordBank.all[0]
+            ?? WordBank.placeholder
     }
 
     var body: some View {

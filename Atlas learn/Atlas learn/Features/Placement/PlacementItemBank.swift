@@ -40,7 +40,7 @@ enum PlacementItemBank {
         )
     }
 
-    private static func assessmentSort(_ lhs: WordEntry, _ rhs: WordEntry) -> Bool {
+    nonisolated private static func assessmentSort(_ lhs: WordEntry, _ rhs: WordEntry) -> Bool {
         let lhsRank = lhs.frequencyRank ?? Int.max
         let rhsRank = rhs.frequencyRank ?? Int.max
         if lhsRank != rhsRank { return lhsRank < rhsRank }

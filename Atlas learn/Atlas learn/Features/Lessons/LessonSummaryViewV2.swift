@@ -20,7 +20,7 @@ struct LessonSummaryViewV2: View {
         return ids.compactMap { id in
             guard !seen.contains(id) else { return nil }
             seen.insert(id)
-            return WordBank.all.first { $0.id == id }
+            return WordBank.word(withID: id)
         }
     }
 

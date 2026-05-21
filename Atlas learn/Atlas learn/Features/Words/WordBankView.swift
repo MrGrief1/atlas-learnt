@@ -32,13 +32,13 @@ private enum WordBankPickerKind: Hashable {
 }
 
 private enum WordBankSearchIndex {
-    static let searchableTextByID: [String: String] = Dictionary(uniqueKeysWithValues: WordBank.all.map { word in
-        (word.id, "\(word.english) \(word.russian) \(word.partOfSpeech) \(word.topic)".lowercased())
-    })
+    nonisolated static var searchableTextByID: [String: String] {
+        WordBank.searchableTextByID
+    }
 
-    static let numericSuffixByID: [String: Int] = Dictionary(uniqueKeysWithValues: WordBank.all.map { word in
-        (word.id, Int(word.id.split(separator: "-").last ?? "") ?? 0)
-    })
+    nonisolated static var numericSuffixByID: [String: Int] {
+        WordBank.numericSuffixByID
+    }
 }
 
 private struct WordBankQueryContext {
@@ -83,7 +83,7 @@ private struct WordBankQueryContext {
         self.currentLevel = currentLevel
     }
 
-    func matches(_ word: WordEntry) -> Bool {
+    nonisolated func matches(_ word: WordEntry) -> Bool {
         switch filter {
         case .all:
             break
@@ -103,11 +103,11 @@ private struct WordBankQueryContext {
         return WordBankSearchIndex.searchableTextByID[word.id]?.contains(query) == true
     }
 
-    func sorted(_ words: [WordEntry]) -> [WordEntry] {
+    nonisolated func sorted(_ words: [WordEntry]) -> [WordEntry] {
         words.sorted(by: precedes)
     }
 
-    private func precedes(_ left: WordEntry, _ right: WordEntry) -> Bool {
+    nonisolated private func precedes(_ left: WordEntry, _ right: WordEntry) -> Bool {
         switch sortOption {
         case .smart:
             let leftScore = smartSortScore(for: left)
@@ -150,7 +150,7 @@ private struct WordBankQueryContext {
         }
     }
 
-    private func smartSortScore(for word: WordEntry) -> Int {
+    nonisolated private func smartSortScore(for word: WordEntry) -> Int {
         let memory = memories[word.id]
         let mastery = memory?.mastery ?? 0
         var score = 0
@@ -167,7 +167,7 @@ private struct WordBankQueryContext {
         return score
     }
 
-    private func isAlphabeticallyBefore(_ left: WordEntry, _ right: WordEntry) -> Bool {
+    nonisolated private func isAlphabeticallyBefore(_ left: WordEntry, _ right: WordEntry) -> Bool {
         left.english.localizedCaseInsensitiveCompare(right.english) == .orderedAscending
     }
 }
@@ -185,6 +185,7 @@ struct WordBankView: View {
     @State private var expandedPicker: WordBankPickerKind?
     @State private var selectedPracticeWord: WordEntry?
     @State private var displayedWords: [WordEntry] = []
+    @State private var isRefreshingWords = false
     @State private var searchRefreshTask: Task<Void, Never>?
 
     private var language: AppLanguage {
@@ -257,6 +258,13 @@ struct WordBankView: View {
                     .padding(.top, AtlasLayout.scrollTopInset)
                     .padding(.bottom, 24)
                 }
+                .overlay {
+                    if isRefreshingWords && displayedWords.isEmpty {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(.black)
+                    }
+                }
             }
             .padding(.horizontal, AtlasLayout.modalPadding - AtlasLayout.scrollShadowPadding)
             .padding(.top, 20)
@@ -267,6 +275,7 @@ struct WordBankView: View {
         .onAppear(perform: refreshDisplayedWords)
         .onDisappear {
             searchRefreshTask?.cancel()
+            isRefreshingWords = false
         }
         .onChange(of: searchText) { _, _ in
             scheduleSearchRefresh()
@@ -311,17 +320,14 @@ struct WordBankView: View {
     }
 
     private func scheduleSearchRefresh() {
-        searchRefreshTask?.cancel()
-        searchRefreshTask = Task {
-            try? await Task.sleep(nanoseconds: 220_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                refreshDisplayedWords()
-            }
-        }
+        queueDisplayedWordsRefresh(after: 220_000_000)
     }
 
     private func refreshDisplayedWords() {
+        queueDisplayedWordsRefresh()
+    }
+
+    private func queueDisplayedWordsRefresh(after delay: UInt64 = 0) {
         searchRefreshTask?.cancel()
         let context = WordBankQueryContext(
             language: language,
@@ -338,7 +344,24 @@ struct WordBankView: View {
             currentLevel: profile.currentLevel
         )
 
-        displayedWords = context.sorted(WordBank.all.filter(context.matches))
+        isRefreshingWords = true
+        searchRefreshTask = Task {
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled else { return }
+            }
+
+            let words = await Task.detached(priority: .userInitiated) {
+                context.sorted(WordBank.all.filter(context.matches))
+            }.value
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                displayedWords = words
+                isRefreshingWords = false
+            }
+        }
     }
 
     private var filterControls: some View {

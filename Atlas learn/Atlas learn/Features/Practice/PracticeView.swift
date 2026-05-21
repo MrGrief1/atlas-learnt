@@ -12,7 +12,7 @@ struct PracticeView: View {
 
     private var selectedWord: WordEntry? {
         if let startWordID {
-            return words.first { $0.id == startWordID } ?? WordBank.all.first { $0.id == startWordID }
+            return words.first { $0.id == startWordID } ?? WordBank.word(withID: startWordID)
         }
 
         return words.count == 1 ? words.first : nil
@@ -30,4 +30,3 @@ struct PracticeView: View {
         )
     }
 }
-
