@@ -677,6 +677,129 @@ struct WordEntry: Codable, Hashable, Identifiable {
         case composePromptEN
         case composePromptRU
         case acceptedAnswers
+        case word
+        case translationRU = "translation_ru"
+        case partOfSpeechSnake = "part_of_speech"
+        case exampleENSnake = "example_en"
+        case examplesENSnake = "examples_en"
+        case usageCategory = "usage_category"
+    }
+
+    private static func decodeString(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        keys: [CodingKeys]
+    ) -> String? {
+        for key in keys {
+            if let value = try? container.decode(String.self, forKey: key) {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+
+            if let value = try? container.decode(Int.self, forKey: key) {
+                return String(value)
+            }
+        }
+
+        return nil
+    }
+
+    private static func decodeStringArray(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> [String]? {
+        guard let values = try? container.decode([String].self, forKey: key) else { return nil }
+        let cleaned = values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    private static func decodeInt(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        keys: [CodingKeys]
+    ) -> Int? {
+        for key in keys {
+            if let value = try? container.decode(Int.self, forKey: key) {
+                return value
+            }
+
+            if let value = try? container.decode(String.self, forKey: key),
+               let intValue = Int(value) {
+                return intValue
+            }
+        }
+
+        return nil
+    }
+
+    private static func normalizedPartOfSpeech(_ rawValue: String) -> String {
+        let names = [
+            "n": "noun",
+            "v": "verb",
+            "adj": "adjective",
+            "adv": "adverb"
+        ]
+        let parts = rawValue
+            .split(separator: ";")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+
+        guard !parts.isEmpty else { return "word" }
+        return parts.map { names[$0] ?? $0 }.joined(separator: "; ")
+    }
+
+    private static func level(forFrequencyRank rank: Int?) -> LearningLevel {
+        guard let rank else { return .a2 }
+
+        switch rank {
+        case ...1200:
+            return .a1
+        case ...3000:
+            return .a2
+        case ...5500:
+            return .b1
+        case ...7500:
+            return .b2
+        case ...9000:
+            return .c1
+        default:
+            return .c2
+        }
+    }
+
+    private static func topic(forUsageCategory category: String?) -> String {
+        switch category?.lowercased() {
+        case "document", "language", "science", "abstract":
+            return "Study"
+        case "money", "legal":
+            return "Business"
+        case "medical", "body", "adult_safe":
+            return "Health"
+        case "tech":
+            return "Tech"
+        case "place", "nautical", "vehicle":
+            return "Travel"
+        case "music", "art", "game", "sport", "clothing", "food":
+            return "Culture"
+        case "plant", "animal", "material":
+            return "Nature"
+        case "person", "tool":
+            return "Work"
+        default:
+            return "Everyday"
+        }
+    }
+
+    private static func slug(for value: String) -> String {
+        let lowercased = value.lowercased()
+        let allowed = CharacterSet.alphanumerics
+        let scalars = lowercased.unicodeScalars.map { scalar in
+            allowed.contains(scalar) ? Character(scalar) : "-"
+        }
+        let collapsed = String(scalars)
+            .split(separator: "-")
+            .joined(separator: "-")
+        return collapsed.isEmpty ? "word" : collapsed
     }
 
     init(
@@ -751,21 +874,49 @@ struct WordEntry: Codable, Hashable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        english = try container.decode(String.self, forKey: .english)
-        lemma = try container.decodeIfPresent(String.self, forKey: .lemma) ?? english.lowercased()
-        russian = try container.decode(String.self, forKey: .russian)
-        partOfSpeech = try container.decodeIfPresent(String.self, forKey: .partOfSpeech) ?? "word"
-        ipa = try container.decodeIfPresent(String.self, forKey: .ipa) ?? "/\(english)/"
-        definitionEN = try container.decodeIfPresent(String.self, forKey: .definitionEN) ?? "A useful English word for everyday communication."
-        definitionRU = try container.decodeIfPresent(String.self, forKey: .definitionRU) ?? "Полезное английское слово для общения."
-        exampleEN = try container.decodeIfPresent(String.self, forKey: .exampleEN) ?? "I can use \(english) today."
-        exampleRU = try container.decodeIfPresent(String.self, forKey: .exampleRU) ?? "Я могу использовать \(english) сегодня."
-        level = try container.decodeIfPresent(LearningLevel.self, forKey: .level)
+        let sourceRank = Self.decodeInt(from: container, keys: [.frequencyRank, .id])
+        let sourceExamples = Self.decodeStringArray(from: container, key: .examplesENSnake) ?? []
+        let decodedEnglish = Self.decodeString(from: container, keys: [.english, .word])
+
+        guard let decodedEnglish else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.english,
+                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Word entry is missing english/word.")
+            )
+        }
+
+        english = decodedEnglish
+
+        let decodedID = Self.decodeString(from: container, keys: [.id])
+        if let decodedID, (try? container.decode(String.self, forKey: .id)) != nil {
+            id = decodedID
+        } else {
+            let fallbackRank = abs(english.hashValue % 10_000)
+            let suffix = String(format: "%04d", sourceRank ?? fallbackRank)
+            id = "\(Self.slug(for: english))-\(suffix)"
+        }
+
+        lemma = Self.decodeString(from: container, keys: [.lemma]) ?? english.lowercased()
+        russian = Self.decodeString(from: container, keys: [.russian, .translationRU]) ?? "учебное слово: \(english)"
+        partOfSpeech = Self.normalizedPartOfSpeech(
+            Self.decodeString(from: container, keys: [.partOfSpeech, .partOfSpeechSnake]) ?? "word"
+        )
+        ipa = Self.decodeString(from: container, keys: [.ipa]) ?? "/\(english)/"
+        definitionEN = Self.decodeString(from: container, keys: [.definitionEN]) ?? "Common English word: \(english)."
+        definitionRU = Self.decodeString(from: container, keys: [.definitionRU]) ?? "Перевод: \(russian)."
+        exampleEN = Self.decodeString(from: container, keys: [.exampleEN, .exampleENSnake])
+            ?? sourceExamples.first
+            ?? "I can use \(english) today."
+        let decodedExampleRU = Self.decodeString(from: container, keys: [.exampleRU]) ?? "Перевод: \(russian)."
+        exampleRU = decodedExampleRU
+        let decodedLevel = try container.decodeIfPresent(LearningLevel.self, forKey: .level)
             ?? container.decodeIfPresent(LearningLevel.self, forKey: .cefrLevel)
-            ?? .a2
-        topic = try container.decodeIfPresent(String.self, forKey: .topic) ?? "Everyday"
-        frequencyRank = try container.decodeIfPresent(Int.self, forKey: .frequencyRank)
+            ?? Self.level(forFrequencyRank: sourceRank)
+        level = decodedLevel
+        let decodedTopic = Self.decodeString(from: container, keys: [.topic])
+            ?? Self.topic(forUsageCategory: Self.decodeString(from: container, keys: [.usageCategory]))
+        topic = decodedTopic
+        frequencyRank = Self.decodeInt(from: container, keys: [.frequencyRank]) ?? sourceRank
         subtopics = try container.decodeIfPresent([String].self, forKey: .subtopics) ?? []
         register = try container.decodeIfPresent(String.self, forKey: .register)
         synonyms = try container.decodeIfPresent([String].self, forKey: .synonyms) ?? []
@@ -773,19 +924,22 @@ struct WordEntry: Codable, Hashable, Identifiable {
         sentenceTiles = try container.decodeIfPresent([String].self, forKey: .sentenceTiles) ?? exampleEN.split(separator: " ").map(String.init)
         clozeSentence = try container.decodeIfPresent(String.self, forKey: .clozeSentence) ?? exampleEN.replacingOccurrences(of: english, with: "____")
         hints = try container.decodeIfPresent([String].self, forKey: .hints) ?? []
-        collocations = try container.decodeIfPresent([String].self, forKey: .collocations) ?? []
+        collocations = try container.decodeIfPresent([String].self, forKey: .collocations) ?? ["use \(english)", "\(english) in context"]
         phrasalForms = try container.decodeIfPresent([String].self, forKey: .phrasalForms) ?? []
         wordFamily = try container.decodeIfPresent([String].self, forKey: .wordFamily) ?? []
         confusionGroup = try container.decodeIfPresent([String].self, forKey: .confusionGroup) ?? []
         grammarPatterns = try container.decodeIfPresent([String].self, forKey: .grammarPatterns) ?? []
         examples = try container.decodeIfPresent([WordExample].self, forKey: .examples)
-            ?? [WordExample(english: exampleEN, russian: exampleRU, level: level, topic: topic, source: "local")]
+            ?? (sourceExamples.isEmpty
+                ? [WordExample(english: exampleEN, russian: decodedExampleRU, level: decodedLevel, topic: decodedTopic, source: "local")]
+                : sourceExamples.map { WordExample(english: $0, russian: decodedExampleRU, level: decodedLevel, topic: decodedTopic, source: "local") })
         safetyTags = try container.decodeIfPresent([String].self, forKey: .safetyTags) ?? []
-        extraExamplesEN = try container.decodeIfPresent([String].self, forKey: .extraExamplesEN) ?? []
-        extraExamplesRU = try container.decodeIfPresent([String].self, forKey: .extraExamplesRU) ?? []
+        let decodedExtraExamplesEN = try container.decodeIfPresent([String].self, forKey: .extraExamplesEN) ?? Array(sourceExamples.dropFirst())
+        extraExamplesEN = decodedExtraExamplesEN
+        extraExamplesRU = try container.decodeIfPresent([String].self, forKey: .extraExamplesRU) ?? Array(repeating: decodedExampleRU, count: decodedExtraExamplesEN.count)
         composePromptEN = try container.decodeIfPresent(String.self, forKey: .composePromptEN) ?? "Write a short sentence with \(english)."
         composePromptRU = try container.decodeIfPresent(String.self, forKey: .composePromptRU) ?? "Напиши короткое предложение со словом \(english)."
-        acceptedAnswers = try container.decodeIfPresent([String].self, forKey: .acceptedAnswers) ?? []
+        acceptedAnswers = try container.decodeIfPresent([String].self, forKey: .acceptedAnswers) ?? Array(([english] + sourceExamples).prefix(4))
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1666,6 +1820,10 @@ extension Array where Element: Equatable {
     }
 }
 
+private struct WordBankPayload: Decodable {
+    let entries: [WordEntry]
+}
+
 enum WordBank {
     static let topics = ["Everyday", "Work", "Study", "Emotions", "Travel", "Business", "Health", "Tech", "Culture", "Nature"]
 
@@ -1819,13 +1977,22 @@ enum WordBank {
 
     private static func loadBundledWords() -> [WordEntry]? {
         guard let url = Bundle.main.url(forResource: "WordBank", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode([WordEntry].self, from: data)
+              let data = try? Data(contentsOf: url)
         else {
             return nil
         }
 
-        return decoded
+        let decoder = JSONDecoder()
+
+        if let decoded = try? decoder.decode([WordEntry].self, from: data) {
+            return decoded
+        }
+
+        if let decoded = try? decoder.decode(WordBankPayload.self, from: data) {
+            return decoded.entries
+        }
+
+        return nil
     }
 
     private static func fallbackWords() -> [WordEntry] {

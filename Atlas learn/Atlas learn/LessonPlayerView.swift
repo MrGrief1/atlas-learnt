@@ -86,21 +86,12 @@ struct LessonPlayerView: View {
     }
 
     private var lessonBackground: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.97, green: 0.94, blue: 0.86),
-                Color(red: 0.84, green: 0.95, blue: 0.92),
-                Color(red: 0.98, green: 0.89, blue: 0.78)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        PremiumHomeBackground()
     }
 
     private func lessonContent(run: LessonRun) -> some View {
         VStack(spacing: 0) {
-            LessonPlayerHeader(
+            DarkLessonHeader(
                 language: language,
                 mode: run.mode,
                 progress: lessonProgress(for: run),
@@ -113,20 +104,37 @@ struct LessonPlayerView: View {
             )
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 13) {
-                    LessonTaskRail(tasks: run.tasks, currentIndex: run.currentTaskIndex)
-
+                VStack(alignment: .leading, spacing: 16) {
                     if let task = currentTask {
-                        taskContent(task)
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 8) {
+                                Image(systemName: task.type.icon)
+                                    .font(.system(size: 13, weight: .black))
+
+                                Text(task.type.title(for: language))
+                                    .font(.system(size: 13, weight: .black, design: .rounded))
+                            }
+                            .foregroundStyle(.white.opacity(0.72))
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                            .background(Capsule().fill(Color.white.opacity(0.08)))
+                            .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 1))
+
+                            taskContent(task)
+                        }
                     }
                 }
                 .padding(.horizontal, AtlasLayout.screenPadding)
-                .padding(.top, 12)
-                .padding(.bottom, 132)
+                .padding(.top, 14)
+                .padding(.bottom, 150)
             }
         }
         .safeAreaInset(edge: .bottom) {
             bottomPanel
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+                .shadow(color: .black.opacity(0.35), radius: 18, y: 10)
         }
     }
 

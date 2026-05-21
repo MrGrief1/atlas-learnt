@@ -17,6 +17,7 @@ struct LessonPathNode: Identifiable, Equatable {
         case completed
         case current
         case locked
+        case boss
     }
 
     let id: String
@@ -39,7 +40,7 @@ enum LessonPathCatalog {
                     LessonPathNode(id: "u1-listening", title: "Listening", mode: .listening, state: profile.xp > 40 ? .current : .locked, estimatedMinutes: 5),
                     LessonPathNode(id: "u1-story", title: "Story", mode: .story, state: profile.xp > 80 ? .current : .locked, estimatedMinutes: 6),
                     LessonPathNode(id: "u1-review", title: "Review", mode: .review, state: profile.dueWordsCount > 0 ? .current : .locked, estimatedMinutes: 5),
-                    LessonPathNode(id: "u1-boss", title: "Boss Check", mode: .boss, state: profile.xp > 120 ? .current : .locked, estimatedMinutes: 7)
+                    LessonPathNode(id: "u1-boss", title: "Boss Check", mode: .boss, state: profile.xp > 120 ? .boss : .locked, estimatedMinutes: 7)
                 ]
             ),
             LessonPathUnit(
@@ -56,4 +57,3 @@ enum LessonPathCatalog {
         ]
     }
 }
-

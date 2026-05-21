@@ -60,24 +60,37 @@ struct HomeView: View {
 
     var body: some View {
         ZStack {
-            AtlasColors.ink
-                .ignoresSafeArea()
-
+            PremiumHomeBackground()
             wordPager
                 .ignoresSafeArea(.container, edges: .vertical)
-
-            edgeObscuration
-
-            VStack(spacing: 0) {
-                topBar
-
-                Spacer()
-
-                bottomNavigation
-            }
-            .padding(.horizontal, AtlasLayout.screenPadding)
-            .padding(.top, 16)
-            .padding(.bottom, 18)
+        }
+        .safeAreaInset(edge: .top) {
+            topBar
+                .padding(.horizontal, AtlasLayout.screenPadding)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+                .background(PremiumTopFade())
+        }
+        .safeAreaInset(edge: .bottom) {
+            PremiumLessonDockView(
+                profile: profile,
+                openLesson: { mode in
+                    openLessonLauncher(mode: mode, word: nil)
+                },
+                openWords: {
+                    AtlasHaptics.tap()
+                    showsWordBank = true
+                },
+                openMistakes: {
+                    openLessonLauncher(mode: .weakWords, word: nil)
+                },
+                openStats: {
+                    AtlasHaptics.tap()
+                    showsStats = true
+                }
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
         }
         .onAppear {
             AtlasHaptics.prepare()
@@ -138,36 +151,6 @@ struct HomeView: View {
             WordInfoView(word: word, language: profile.appLanguage)
                 .presentationDetents([.large])
         }
-    }
-
-    private var edgeObscuration: some View {
-        VStack(spacing: 0) {
-            LinearGradient(
-                stops: [
-                    .init(color: AtlasColors.ink, location: 0),
-                    .init(color: AtlasColors.ink, location: 0.68),
-                    .init(color: AtlasColors.ink.opacity(0), location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 220)
-
-            Spacer()
-
-            LinearGradient(
-                stops: [
-                    .init(color: AtlasColors.ink.opacity(0), location: 0),
-                    .init(color: AtlasColors.ink, location: 0.48),
-                    .init(color: AtlasColors.ink, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 150)
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
     }
 
     private var topBar: some View {
@@ -251,116 +234,40 @@ struct HomeView: View {
     }
 
     private func wordPage(for word: WordEntry, in size: CGSize) -> some View {
-        ZStack {
-            wordCard(for: word)
-                .padding(.horizontal, AtlasLayout.screenPadding)
-                .position(x: size.width / 2, y: size.height * 0.48)
+        let topReserve: CGFloat = size.height < 760 ? 132 : 154
+        let dockReserve: CGFloat = size.height < 760 ? 292 : 320
 
-            actionRow(for: word)
-                .padding(.horizontal, 54)
-                .position(x: size.width / 2, y: size.height * 0.77)
-        }
-    }
+        return VStack(spacing: 0) {
+            Spacer(minLength: topReserve)
 
-    private func wordCard(for word: WordEntry) -> some View {
-        let example = displayedExample(for: word)
-
-        return VStack(spacing: 21) {
-            VStack(spacing: 10) {
-                Text(word.english.lowercased())
-                    .font(.system(size: word.english.count > 12 ? 46 : 56, weight: .black, design: .serif))
-                    .foregroundStyle(.white)
-                    .minimumScaleFactor(0.68)
-                    .lineLimit(1)
-
-                Button {
+            PremiumWordHeroView(
+                word: word,
+                example: displayedExample(for: word),
+                status: exampleStatus(for: word),
+                language: profile.appLanguage,
+                isFavorite: profile.favoriteWordIDs.contains(word.id),
+                isSaved: profile.savedWordIDs.contains(word.id),
+                speak: {
                     speak(word)
-                } label: {
-                    HStack(spacing: 8) {
-                        Text(word.ipa)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                        Image(systemName: "speaker.wave.2")
-                            .font(.system(size: 17, weight: .medium))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(Color.black.opacity(0.16)))
-                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                },
+                showInfo: {
+                    selectedInfoWord = word
+                },
+                drill: {
+                    openLessonLauncher(mode: .wordDrill, word: word)
+                },
+                toggleFavorite: {
+                    profile.toggleFavorite(word.id)
+                },
+                toggleSaved: {
+                    profile.toggleSaved(word.id)
                 }
-                .buttonStyle(.plain)
-            }
+            )
+            .padding(.horizontal, AtlasLayout.screenPadding)
 
-            VStack(spacing: 10) {
-                Text(word.russian)
-                    .font(.system(size: 29, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.74)
-
-                Text(example.english)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(example.russian)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .minimumScaleFactor(0.82)
-
-                ExampleStatusPill(status: exampleStatus(for: word), language: profile.appLanguage)
-            }
-            .padding(.horizontal, 4)
+            Spacer(minLength: dockReserve)
         }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func actionRow(for word: WordEntry) -> some View {
-        HStack(spacing: 22) {
-            homeIconButton(systemName: "info", size: 48) {
-                selectedInfoWord = word
-            }
-
-            Button {
-                openLessonLauncher(mode: .wordDrill, word: word)
-            } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: "target")
-                        .font(.system(size: 17, weight: .black))
-                    Text(profile.appLanguage.text(ru: "Отработать", en: "Drill"))
-                        .font(.system(size: 13, weight: .black, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.68)
-                }
-                .foregroundStyle(.white)
-                .frame(width: 116, height: 48)
-                .background(Capsule().fill(AtlasColors.deepInk))
-                .overlay(Capsule().stroke(Color.white.opacity(0.16), lineWidth: 1.4))
-                .shadow(color: .black.opacity(0.24), radius: 12, y: 9)
-            }
-            .buttonStyle(.plain)
-
-            homeIconButton(
-                systemName: profile.favoriteWordIDs.contains(word.id) ? "heart.fill" : "heart",
-                foreground: profile.favoriteWordIDs.contains(word.id) ? AtlasColors.coral : .white,
-                size: 48
-            ) {
-                profile.toggleFavorite(word.id)
-            }
-
-            homeIconButton(
-                systemName: profile.savedWordIDs.contains(word.id) ? "bookmark.fill" : "bookmark",
-                size: 48
-            ) {
-                profile.toggleSaved(word.id)
-            }
-        }
-        .frame(maxWidth: .infinity)
+        .frame(width: size.width, height: size.height)
     }
 
     private func displayedExample(for word: WordEntry) -> GeneratedWordExample {
@@ -388,48 +295,6 @@ struct HomeView: View {
 
         guard let generated = await AtlasExampleGenerator.generateExample(for: word) else { return }
         generatedExamples[word.id] = generated
-    }
-
-    private var bottomNavigation: some View {
-        VStack(spacing: 12) {
-            LessonPathView(profile: profile) { mode in
-                openLessonLauncher(mode: mode, word: nil)
-            }
-
-            HStack {
-                homeIconButton(systemName: "square.grid.2x2", size: 56) {
-                    showsWordBank = true
-                }
-
-                Spacer()
-
-                Button {
-                    openLessonLauncher(mode: .daily, word: nil)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "graduationcap")
-                            .font(.system(size: 21, weight: .semibold))
-                        Text(profile.appLanguage.text(ru: "Начать урок", en: "Start lesson"))
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.76)
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .frame(height: 54)
-                    .background(Capsule().fill(AtlasColors.deepInk))
-                    .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1.2))
-                    .shadow(color: .black.opacity(0.24), radius: 14, y: 10)
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                homeIconButton(systemName: "chart.bar", size: 56) {
-                    showsStats = true
-                }
-            }
-        }
     }
 
     private func homeIconButton(

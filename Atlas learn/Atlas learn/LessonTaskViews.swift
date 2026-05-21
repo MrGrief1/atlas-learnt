@@ -738,14 +738,15 @@ private struct LessonTileButton: View {
 
 private extension View {
     func lessonPlayerSurface() -> some View {
-        padding(15)
-            .background(.white.opacity(0.76))
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        self
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.96))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(AtlasColors.line, lineWidth: 2.1)
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.black.opacity(0.16), lineWidth: 1.4)
             )
-            .shadow(color: AtlasColors.line.opacity(0.64), radius: 0, y: 5)
+            .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
     }
 }
-

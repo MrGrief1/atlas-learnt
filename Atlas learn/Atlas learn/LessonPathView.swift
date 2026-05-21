@@ -109,6 +109,8 @@ private struct LessonPathNodeButton: View {
             AtlasColors.mint
         case .locked:
             .white.opacity(0.18)
+        case .boss:
+            Color(red: 1.0, green: 0.82, blue: 0.36)
         }
     }
 
@@ -293,4 +295,3 @@ private struct LessonLaunchPreview {
         }
     }
 }
-
